@@ -1,16 +1,51 @@
 # Bulkit Node.js SDK
 
 [![npm](https://img.shields.io/npm/v/bulkit.svg)](https://www.npmjs.com/package/bulkit)
-[![CI](https://github.com/bulkit-io/bulkit/actions/workflows/ci.yml/badge.svg)](https://github.com/bulkit-io/bulkit/actions/workflows/ci.yml)
+[![Docs](https://img.shields.io/badge/docs-docs.bulkit.io-blue)](https://docs.bulkit.io/docs?utm_source=npm&utm_medium=readme&utm_campaign=node_sdk)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 
-The official TypeScript / JavaScript library for the [Bulkit](https://bulkit.io) API: schedule
-and publish social media posts from your own code.
+**Schedule and publish to X, LinkedIn, Instagram, Facebook, Threads, TikTok, YouTube, Pinterest,
+Reddit, Bluesky and Vimeo from your own code.**
 
+[Bulkit](https://bulkit.io?utm_source=npm&utm_medium=readme&utm_campaign=node_sdk) is a social
+media scheduler built for developers and AI agents. Write a post once, tailor it per network,
+and Bulkit handles each platform's limits, media rules, threads and retries. This package is the
+official TypeScript / JavaScript client for its API.
+
+**[Start your 14-day free trial →](https://app.bulkit.io/register?utm_source=npm&utm_medium=readme&utm_campaign=node_sdk)**
+&nbsp;·&nbsp; [Get an API key](#get-your-api-key) &nbsp;·&nbsp;
+[Documentation](https://docs.bulkit.io/docs?utm_source=npm&utm_medium=readme&utm_campaign=node_sdk)
+
+- One call posts to many networks, with a different text for each one
+- Threads, images and video, scheduling, comments, and webhooks
 - Fully typed, generated from the Bulkit OpenAPI spec
 - Zero runtime dependencies, ESM and CommonJS
 - Retries with backoff, timeouts, and automatic idempotency keys on every write
-- Cursor pagination with `for await`
-- Webhook signature verification
+
+## Get your API key
+
+You need a Bulkit account and an API key before the SDK can do anything. It takes a few minutes:
+
+1. **Create an account.** [Sign up for Bulkit](https://app.bulkit.io/register?utm_source=npm&utm_medium=readme&utm_campaign=node_sdk).
+   Every plan starts with a 14-day free trial.
+2. **Connect your social accounts.** Bulkit publishes through your own platform apps (your X
+   app, your LinkedIn app, and so on). Add them and connect your accounts in the app. The
+   [workspace setup guide](https://docs.bulkit.io/docs/setup?utm_source=npm&utm_medium=readme&utm_campaign=node_sdk)
+   walks you through each network.
+3. **Create a key.** In the app, open **Developers → API & Webhooks** and click **Create key**.
+   Copy it straight away, because it is only shown once.
+
+Put the key in an environment variable, never in your code:
+
+```sh
+# .env
+BULKIT_API_KEY=bk_test_xxxxxxxxxxxxxxxx
+```
+
+> **Start with a test key.** A `bk_test_…` key checks and saves your requests exactly like a
+> live key, but never publishes to a real account and is never billed. Switch to a `bk_live_…`
+> key when you are ready to go live. See [Create an API key](https://docs.bulkit.io/docs/api-keys?utm_source=npm&utm_medium=readme&utm_campaign=node_sdk)
+> for details.
 
 ## Installation
 
@@ -213,6 +248,15 @@ Your API key is a secret. The client refuses to run in a browser unless you opt 
 
 This package follows [SemVer](https://semver.org). The API version (`/public/v1`) is fixed per
 major version of the SDK.
+
+## Learn more
+
+- [Bulkit documentation](https://docs.bulkit.io/docs?utm_source=npm&utm_medium=readme&utm_campaign=node_sdk): guides, platform rules and the full API reference
+- [Connect an AI agent (MCP)](https://docs.bulkit.io/docs/guides/mcp?utm_source=npm&utm_medium=readme&utm_campaign=node_sdk): let Claude, Cursor and other agents post through Bulkit
+- [Supported networks](https://bulkit.io/channels?utm_source=npm&utm_medium=readme&utm_campaign=node_sdk)
+- Questions? Email [support@bulkit.io](mailto:support@bulkit.io) or find us on [X](https://x.com/bulkitio)
+
+**New to Bulkit? [Start your 14-day free trial →](https://app.bulkit.io/register?utm_source=npm&utm_medium=readme&utm_campaign=node_sdk)**
 
 ## Contributing
 
