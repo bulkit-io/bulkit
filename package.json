@@ -11,10 +11,10 @@
     "sdk"
   ],
   "homepage": "https://bulkit.io",
-  "bugs": "https://github.com/bulkit-io/bulkit-node/issues",
+  "bugs": "https://github.com/redaantar/bulkit-sdk/issues",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bulkit-io/bulkit-node.git"
+    "url": "git+https://github.com/redaantar/bulkit-sdk.git"
   },
   "license": "MIT",
   "author": "Bulkit <support@bulkit.io>",

@@ -1,7 +1,7 @@
 # Bulkit Node.js SDK
 
 [![npm](https://img.shields.io/npm/v/bulkit.svg)](https://www.npmjs.com/package/bulkit)
-[![CI](https://github.com/bulkit-io/bulkit-node/actions/workflows/ci.yml/badge.svg)](https://github.com/bulkit-io/bulkit-node/actions/workflows/ci.yml)
+[![CI](https://github.com/redaantar/bulkit-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/redaantar/bulkit-sdk/actions/workflows/ci.yml)
 
 The official TypeScript / JavaScript library for the [Bulkit](https://bulkit.io) API: schedule
 and publish social media posts from your own code.
