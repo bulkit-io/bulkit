@@ -1,6 +1,6 @@
 {
   "name": "bulkit",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "The official Node.js / TypeScript SDK for the Bulkit API \u2014 schedule and publish social media posts programmatically.",
   "keywords": [
     "bulkit",
