@@ -1,0 +1,78 @@
+{
+  "name": "bulkit",
+  "version": "0.0.1",
+  "description": "The official Node.js / TypeScript SDK for the Bulkit API \u2014 schedule and publish social media posts programmatically.",
+  "keywords": [
+    "bulkit",
+    "social-media",
+    "scheduling",
+    "publishing",
+    "api",
+    "sdk"
+  ],
+  "homepage": "https://bulkit.io",
+  "bugs": "https://github.com/bulkit-io/bulkit/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bulkit-io/bulkit.git"
+  },
+  "license": "MIT",
+  "author": "Bulkit <support@bulkit.io>",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.cts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "generate": "pnpm dlx --package=openapi-typescript@7.13.0 --package=typescript@5.9 openapi-typescript spec/openapi.json -o src/generated/openapi.ts && biome format --write src/generated",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "check:exports": "publint --strict && attw --pack . --profile node16",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm check:exports",
+    "changeset": "changeset",
+    "version": "changeset version && node scripts/sync-version.mjs",
+    "release": "pnpm build && changeset publish",
+    "prepublishOnly": "pnpm check"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@11.8.0",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "0.18.5",
+    "@biomejs/biome": "2.6.2",
+    "@changesets/cli": "3.0.3",
+    "@types/node": "^22.20.5",
+    "@vitest/coverage-v8": "5.0.5",
+    "publint": "0.3.25",
+    "tsdown": "0.23.1",
+    "typescript": "7.0.2",
+    "vitest": "5.0.5"
+  }
+}
