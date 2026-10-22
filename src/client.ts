@@ -32,8 +32,8 @@ export interface ClientOptions {
   /** Your API key (`bk_live_…` or `bk_test_…`). Defaults to `process.env.BULKIT_API_KEY`. */
   apiKey?: string | undefined;
   /**
-   * Scheme and host of the Bulkit deployment, e.g. `https://bulkit.example.com` for a
-   * self-hosted instance. Defaults to `process.env.BULKIT_BASE_URL`, then `https://api.bulkit.io`.
+   * Scheme and host to send requests to. Only change this to route through a proxy or a mock
+   * server. Defaults to `process.env.BULKIT_BASE_URL`, then `https://api.bulkit.io`.
    */
   baseURL?: string | undefined;
   /** Per-attempt timeout in milliseconds. Default 60 000. */

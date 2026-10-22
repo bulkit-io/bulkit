@@ -36,16 +36,13 @@ async function settle<T>(promise: Promise<T>): Promise<T> {
 describe('configuration', () => {
   it('reads the API key and base URL from the environment', async () => {
     vi.stubEnv('BULKIT_API_KEY', 'bk_live_env');
-    vi.stubEnv('BULKIT_BASE_URL', 'https://self-hosted.example/');
+    vi.stubEnv('BULKIT_BASE_URL', 'https://proxy.example/');
     const fetch = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => json([]));
     const client = new Bulkit({ fetch });
 
     await client.tags.list();
 
-    expect(fetch).toHaveBeenCalledWith(
-      'https://self-hosted.example/public/v1/tags',
-      expect.anything(),
-    );
+    expect(fetch).toHaveBeenCalledWith('https://proxy.example/public/v1/tags', expect.anything());
     const headers = new Headers(fetch.mock.calls[0]?.[1]?.headers);
     expect(headers.get('authorization')).toBe('Bearer bk_live_env');
     expect(client.isTestMode).toBe(false);

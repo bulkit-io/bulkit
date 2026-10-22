@@ -56,13 +56,6 @@ console.log(post.id, post.status); // "scheduled"
 A `bk_test_…` key validates and stores exactly like a live key, but publishes nothing and bills
 nothing. `bulkit.isTestMode` tells you which kind of key a client holds.
 
-### Self-hosted instances
-
-```ts
-const bulkit = new Bulkit({ baseURL: 'https://bulkit.example.com' });
-// or set BULKIT_BASE_URL
-```
-
 ## Publishing is asynchronous
 
 `intent: 'now'` and `posts.publish()` return as soon as the work is queued, with status
