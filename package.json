@@ -1,6 +1,6 @@
 {
   "name": "bulkit",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "The official Node.js / TypeScript SDK for the Bulkit API \u2014 schedule and publish social media posts programmatically.",
   "keywords": [
     "bulkit",
@@ -11,10 +11,10 @@
     "sdk"
   ],
   "homepage": "https://bulkit.io",
-  "bugs": "https://github.com/redaantar/bulkit-sdk/issues",
+  "bugs": "https://github.com/redaantar/bulkit/issues",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/redaantar/bulkit-sdk.git"
+    "url": "git+https://github.com/redaantar/bulkit.git"
   },
   "license": "MIT",
   "author": "Bulkit <support@bulkit.io>",
