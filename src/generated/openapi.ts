@@ -41,7 +41,7 @@ export interface paths {
      *
      *     Read live from the platform, so it is the best answer right now rather than a promise, and the same rules are checked again when the post goes out. A platform that declares everything up front answers with an empty `options` and nulls, and `GET /platforms` already said it all.
      *
-     *     A channel that needs reconnecting is a 409; a platform that could not be reached is a 502.
+     *     A channel that needs reconnecting is a 409. A platform that refused the read is a 422, and one that failed it is a 502; both carry the platform’s own reason.
      */
     get: operations['PublicChannelsController_capabilities'];
     put?: never;
@@ -63,7 +63,7 @@ export interface paths {
      * Search an option’s values
      * @description For an option whose `type` is `search` on `GET /platforms`, such as Instagram’s `location_id`: a set too large to publish, so it is searched instead. Pass `q` to turn a name into values, and send the chosen `value` as the option. Pass `value` instead to turn a stored value back into its label (zero or one result).
      *
-     *     With neither, the answer is an empty list. An option that is not a `search`, or that this platform does not have, is a 400.
+     *     With neither, the answer is an empty list. An option that is not a `search`, or that this platform does not have, is a 400, and so is a search that runs on your own platform app when none is set up. A platform that refused the search is a 422, and one that failed it is a 502; both carry the platform’s own reason.
      */
     get: operations['PublicChannelsController_searchOptionChoices'];
     put?: never;
@@ -141,7 +141,7 @@ export interface paths {
     post?: never;
     /**
      * Abandon a large video upload
-     * @description Throws the session away, parts and all, and frees what it held against the storage allowance.
+     * @description Throws the session away, parts and all, and frees what it held against the storage allowance. A session that already finished, completed or abandoned, is a 404.
      */
     delete: operations['PublicMediaController_abortUpload'];
     options?: never;
@@ -162,7 +162,7 @@ export interface paths {
      * Complete a large video upload
      * @description Joins the parts, checks the file and adds it to the library. The returned `id` is usable straight away in `blocks[].mediaIds`.
      *
-     *     A part that is missing or the wrong length is a 400 that leaves the session open: send that part again and complete again. Anything wrong with the joined FILE (not the size declared, not the type declared) is final, and the session is closed. A second complete for the same session is a 409.
+     *     A part that is missing or the wrong length is a 400 that leaves the session open: send that part again and complete again. Anything wrong with the joined FILE (not the size declared, not the type declared) is final, and the session is closed. A complete that races another for the same session is a 409. Send an `Idempotency-Key`: a retry after a timeout then gets the media item back. Without one, a session that has finished is gone, and completing or abandoning it again is a 404.
      */
     post: operations['PublicMediaController_completeUpload'];
     delete?: never;
@@ -2933,6 +2933,15 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
+      /** @description This `Idempotency-Key` was already used with a different request: another route, another id or another body (`error.field` is `Idempotency-Key`). Replaying the stored response would silently discard what you just asked for, so it is refused instead. `platform_refused`: the platform understood the call and said no, in the words of the message (comments turned off on the post, a locked thread, an app access level that can’t search). The same call will be refused again. */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
       /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
@@ -3045,7 +3054,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description This `Idempotency-Key` was already used with a different request body (`error.field` is `Idempotency-Key`). Replaying the stored response would silently discard what you just asked for, so it is refused instead. `platform_refused`: the platform understood the call and said no, in the words of the message (comments turned off on the post, a locked thread, an app access level that can’t search). The same call will be refused again. */
+      /** @description This `Idempotency-Key` was already used with a different request: another route, another id or another body (`error.field` is `Idempotency-Key`). Replaying the stored response would silently discard what you just asked for, so it is refused instead. `platform_refused`: the platform understood the call and said no, in the words of the message (comments turned off on the post, a locked thread, an app access level that can’t search). The same call will be refused again. */
       422: {
         headers: {
           [name: string]: unknown;
@@ -3226,7 +3235,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `payload_too_large` — an upload past the per-kind ceiling (10 MB for images, 100 MB for video and documents), or a JSON body past the one a request may carry. A larger video goes through `POST /media/uploads`, where the ceiling is the plan’s video cap instead and going over it is a 402. A limit on the resource, not on the plan: a bigger plan does not raise it. */
+      /** @description `payload_too_large` — an upload past the per-kind ceiling (10 MB for images, 100 MB for video and documents, 5 MB for subtitle files), or a JSON body past the one a request may carry. A larger video goes through `POST /media/uploads`, where the ceiling is the plan’s video cap instead and going over it is a 402. A limit on the resource, not on the plan: a bigger plan does not raise it. */
       413: {
         headers: {
           [name: string]: unknown;
@@ -3290,7 +3299,7 @@ export interface operations {
         /**
          * @description Send one on every write. A retry carrying the same key returns the FIRST response instead of doing the work twice — without it, a client that times out and retries schedules the post a second time, and the first is already queued.
          *
-         *     Any string up to 255 characters; a UUID per logical operation is the usual choice. Keys are scoped to your workspace and honoured for 24 hours. The same key with a different body is a `422`; a request still running under this key is a `409 request_in_progress`.
+         *     Any string up to 255 characters; a UUID per logical operation is the usual choice. Keys are scoped to your workspace and honoured for 24 hours. The same key on a different route or id, or with a different body, is a `422`; a request still running under this key is a `409 request_in_progress`.
          *
          *     What a FAILED request does to its key depends on whether it could have changed anything. A `4xx` releases it — every one of them is raised before we write a thing, so fix the input and retry with the same key. A `5xx` pins it, and the retry replays that failure instead of doing the work: a write is several posts and several workflows, so a fault partway through leaves some of them done, and a fresh attempt would publish those a second time. Read `GET /posts/{id}` to see what exists, then continue with a new key.
          */
@@ -3350,7 +3359,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `payload_too_large` — an upload past the per-kind ceiling (10 MB for images, 100 MB for video and documents), or a JSON body past the one a request may carry. A larger video goes through `POST /media/uploads`, where the ceiling is the plan’s video cap instead and going over it is a 402. A limit on the resource, not on the plan: a bigger plan does not raise it. */
+      /** @description `payload_too_large` — an upload past the per-kind ceiling (10 MB for images, 100 MB for video and documents, 5 MB for subtitle files), or a JSON body past the one a request may carry. A larger video goes through `POST /media/uploads`, where the ceiling is the plan’s video cap instead and going over it is a 402. A limit on the resource, not on the plan: a bigger plan does not raise it. */
       413: {
         headers: {
           [name: string]: unknown;
@@ -3368,7 +3377,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description This `Idempotency-Key` was already used with a different request body (`error.field` is `Idempotency-Key`). Replaying the stored response would silently discard what you just asked for, so it is refused instead. `platform_refused`: the platform understood the call and said no, in the words of the message (comments turned off on the post, a locked thread, an app access level that can’t search). The same call will be refused again. */
+      /** @description This `Idempotency-Key` was already used with a different request: another route, another id or another body (`error.field` is `Idempotency-Key`). Replaying the stored response would silently discard what you just asked for, so it is refused instead. `platform_refused`: the platform understood the call and said no, in the words of the message (comments turned off on the post, a locked thread, an app access level that can’t search). The same call will be refused again. */
       422: {
         headers: {
           [name: string]: unknown;
@@ -3504,7 +3513,16 @@ export interface operations {
   PublicMediaController_completeUpload: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        /**
+         * @description Send one on every write. A retry carrying the same key returns the FIRST response instead of doing the work twice — without it, a client that times out and retries schedules the post a second time, and the first is already queued.
+         *
+         *     Any string up to 255 characters; a UUID per logical operation is the usual choice. Keys are scoped to your workspace and honoured for 24 hours. The same key on a different route or id, or with a different body, is a `422`; a request still running under this key is a `409 request_in_progress`.
+         *
+         *     What a FAILED request does to its key depends on whether it could have changed anything. A `4xx` releases it — every one of them is raised before we write a thing, so fix the input and retry with the same key. A `5xx` pins it, and the retry replays that failure instead of doing the work: a write is several posts and several workflows, so a fault partway through leaves some of them done, and a fresh attempt would publish those a second time. Read `GET /posts/{id}` to see what exists, then continue with a new key.
+         */
+        'Idempotency-Key'?: string;
+      };
       path: {
         /** @description The upload session id. */
         id: string;
@@ -3569,6 +3587,15 @@ export interface operations {
       };
       /** @description `unsupported_media_type` — that file type is not something any supported platform can publish. Accepting it would upload cleanly and then fail at publish, which is the failure this refusal exists to prevent. */
       415: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
+        };
+      };
+      /** @description This `Idempotency-Key` was already used with a different request: another route, another id or another body (`error.field` is `Idempotency-Key`). Replaying the stored response would silently discard what you just asked for, so it is refused instead. `platform_refused`: the platform understood the call and said no, in the words of the message (comments turned off on the post, a locked thread, an app access level that can’t search). The same call will be refused again. */
+      422: {
         headers: {
           [name: string]: unknown;
         };
@@ -3961,7 +3988,7 @@ export interface operations {
         /**
          * @description Send one on every write. A retry carrying the same key returns the FIRST response instead of doing the work twice — without it, a client that times out and retries schedules the post a second time, and the first is already queued.
          *
-         *     Any string up to 255 characters; a UUID per logical operation is the usual choice. Keys are scoped to your workspace and honoured for 24 hours. The same key with a different body is a `422`; a request still running under this key is a `409 request_in_progress`.
+         *     Any string up to 255 characters; a UUID per logical operation is the usual choice. Keys are scoped to your workspace and honoured for 24 hours. The same key on a different route or id, or with a different body, is a `422`; a request still running under this key is a `409 request_in_progress`.
          *
          *     What a FAILED request does to its key depends on whether it could have changed anything. A `4xx` releases it — every one of them is raised before we write a thing, so fix the input and retry with the same key. A `5xx` pins it, and the retry replays that failure instead of doing the work: a write is several posts and several workflows, so a fault partway through leaves some of them done, and a fresh attempt would publish those a second time. Read `GET /posts/{id}` to see what exists, then continue with a new key.
          */
@@ -4021,7 +4048,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `payload_too_large` — an upload past the per-kind ceiling (10 MB for images, 100 MB for video and documents), or a JSON body past the one a request may carry. A larger video goes through `POST /media/uploads`, where the ceiling is the plan’s video cap instead and going over it is a 402. A limit on the resource, not on the plan: a bigger plan does not raise it. */
+      /** @description `payload_too_large` — an upload past the per-kind ceiling (10 MB for images, 100 MB for video and documents, 5 MB for subtitle files), or a JSON body past the one a request may carry. A larger video goes through `POST /media/uploads`, where the ceiling is the plan’s video cap instead and going over it is a 402. A limit on the resource, not on the plan: a bigger plan does not raise it. */
       413: {
         headers: {
           [name: string]: unknown;
@@ -4030,7 +4057,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description This `Idempotency-Key` was already used with a different request body (`error.field` is `Idempotency-Key`). Replaying the stored response would silently discard what you just asked for, so it is refused instead. `platform_refused`: the platform understood the call and said no, in the words of the message (comments turned off on the post, a locked thread, an app access level that can’t search). The same call will be refused again. */
+      /** @description This `Idempotency-Key` was already used with a different request: another route, another id or another body (`error.field` is `Idempotency-Key`). Replaying the stored response would silently discard what you just asked for, so it is refused instead. `platform_refused`: the platform understood the call and said no, in the words of the message (comments turned off on the post, a locked thread, an app access level that can’t search). The same call will be refused again. */
       422: {
         headers: {
           [name: string]: unknown;
@@ -4163,7 +4190,7 @@ export interface operations {
         /**
          * @description Send one on every write. A retry carrying the same key returns the FIRST response instead of doing the work twice — without it, a client that times out and retries schedules the post a second time, and the first is already queued.
          *
-         *     Any string up to 255 characters; a UUID per logical operation is the usual choice. Keys are scoped to your workspace and honoured for 24 hours. The same key with a different body is a `422`; a request still running under this key is a `409 request_in_progress`.
+         *     Any string up to 255 characters; a UUID per logical operation is the usual choice. Keys are scoped to your workspace and honoured for 24 hours. The same key on a different route or id, or with a different body, is a `422`; a request still running under this key is a `409 request_in_progress`.
          *
          *     What a FAILED request does to its key depends on whether it could have changed anything. A `4xx` releases it — every one of them is raised before we write a thing, so fix the input and retry with the same key. A `5xx` pins it, and the retry replays that failure instead of doing the work: a write is several posts and several workflows, so a fault partway through leaves some of them done, and a fresh attempt would publish those a second time. Read `GET /posts/{id}` to see what exists, then continue with a new key.
          */
@@ -4244,7 +4271,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `payload_too_large` — an upload past the per-kind ceiling (10 MB for images, 100 MB for video and documents), or a JSON body past the one a request may carry. A larger video goes through `POST /media/uploads`, where the ceiling is the plan’s video cap instead and going over it is a 402. A limit on the resource, not on the plan: a bigger plan does not raise it. */
+      /** @description `payload_too_large` — an upload past the per-kind ceiling (10 MB for images, 100 MB for video and documents, 5 MB for subtitle files), or a JSON body past the one a request may carry. A larger video goes through `POST /media/uploads`, where the ceiling is the plan’s video cap instead and going over it is a 402. A limit on the resource, not on the plan: a bigger plan does not raise it. */
       413: {
         headers: {
           [name: string]: unknown;
@@ -4253,7 +4280,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description This `Idempotency-Key` was already used with a different request body (`error.field` is `Idempotency-Key`). Replaying the stored response would silently discard what you just asked for, so it is refused instead. `platform_refused`: the platform understood the call and said no, in the words of the message (comments turned off on the post, a locked thread, an app access level that can’t search). The same call will be refused again. */
+      /** @description This `Idempotency-Key` was already used with a different request: another route, another id or another body (`error.field` is `Idempotency-Key`). Replaying the stored response would silently discard what you just asked for, so it is refused instead. `platform_refused`: the platform understood the call and said no, in the words of the message (comments turned off on the post, a locked thread, an app access level that can’t search). The same call will be refused again. */
       422: {
         headers: {
           [name: string]: unknown;
@@ -4448,7 +4475,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description This `Idempotency-Key` was already used with a different request body (`error.field` is `Idempotency-Key`). Replaying the stored response would silently discard what you just asked for, so it is refused instead. `platform_refused`: the platform understood the call and said no, in the words of the message (comments turned off on the post, a locked thread, an app access level that can’t search). The same call will be refused again. */
+      /** @description This `Idempotency-Key` was already used with a different request: another route, another id or another body (`error.field` is `Idempotency-Key`). Replaying the stored response would silently discard what you just asked for, so it is refused instead. `platform_refused`: the platform understood the call and said no, in the words of the message (comments turned off on the post, a locked thread, an app access level that can’t search). The same call will be refused again. */
       422: {
         headers: {
           [name: string]: unknown;
@@ -4512,7 +4539,7 @@ export interface operations {
         /**
          * @description Send one on every write. A retry carrying the same key returns the FIRST response instead of doing the work twice — without it, a client that times out and retries schedules the post a second time, and the first is already queued.
          *
-         *     Any string up to 255 characters; a UUID per logical operation is the usual choice. Keys are scoped to your workspace and honoured for 24 hours. The same key with a different body is a `422`; a request still running under this key is a `409 request_in_progress`.
+         *     Any string up to 255 characters; a UUID per logical operation is the usual choice. Keys are scoped to your workspace and honoured for 24 hours. The same key on a different route or id, or with a different body, is a `422`; a request still running under this key is a `409 request_in_progress`.
          *
          *     What a FAILED request does to its key depends on whether it could have changed anything. A `4xx` releases it — every one of them is raised before we write a thing, so fix the input and retry with the same key. A `5xx` pins it, and the retry replays that failure instead of doing the work: a write is several posts and several workflows, so a fault partway through leaves some of them done, and a fresh attempt would publish those a second time. Read `GET /posts/{id}` to see what exists, then continue with a new key.
          */
@@ -4595,7 +4622,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description This `Idempotency-Key` was already used with a different request body (`error.field` is `Idempotency-Key`). Replaying the stored response would silently discard what you just asked for, so it is refused instead. `platform_refused`: the platform understood the call and said no, in the words of the message (comments turned off on the post, a locked thread, an app access level that can’t search). The same call will be refused again. */
+      /** @description This `Idempotency-Key` was already used with a different request: another route, another id or another body (`error.field` is `Idempotency-Key`). Replaying the stored response would silently discard what you just asked for, so it is refused instead. `platform_refused`: the platform understood the call and said no, in the words of the message (comments turned off on the post, a locked thread, an app access level that can’t search). The same call will be refused again. */
       422: {
         headers: {
           [name: string]: unknown;
@@ -4737,7 +4764,7 @@ export interface operations {
         /**
          * @description Send one on every write. A retry carrying the same key returns the FIRST response instead of doing the work twice — without it, a client that times out and retries schedules the post a second time, and the first is already queued.
          *
-         *     Any string up to 255 characters; a UUID per logical operation is the usual choice. Keys are scoped to your workspace and honoured for 24 hours. The same key with a different body is a `422`; a request still running under this key is a `409 request_in_progress`.
+         *     Any string up to 255 characters; a UUID per logical operation is the usual choice. Keys are scoped to your workspace and honoured for 24 hours. The same key on a different route or id, or with a different body, is a `422`; a request still running under this key is a `409 request_in_progress`.
          *
          *     What a FAILED request does to its key depends on whether it could have changed anything. A `4xx` releases it — every one of them is raised before we write a thing, so fix the input and retry with the same key. A `5xx` pins it, and the retry replays that failure instead of doing the work: a write is several posts and several workflows, so a fault partway through leaves some of them done, and a fresh attempt would publish those a second time. Read `GET /posts/{id}` to see what exists, then continue with a new key.
          */
@@ -4814,7 +4841,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description This `Idempotency-Key` was already used with a different request body (`error.field` is `Idempotency-Key`). Replaying the stored response would silently discard what you just asked for, so it is refused instead. `platform_refused`: the platform understood the call and said no, in the words of the message (comments turned off on the post, a locked thread, an app access level that can’t search). The same call will be refused again. */
+      /** @description This `Idempotency-Key` was already used with a different request: another route, another id or another body (`error.field` is `Idempotency-Key`). Replaying the stored response would silently discard what you just asked for, so it is refused instead. `platform_refused`: the platform understood the call and said no, in the words of the message (comments turned off on the post, a locked thread, an app access level that can’t search). The same call will be refused again. */
       422: {
         headers: {
           [name: string]: unknown;
@@ -5464,7 +5491,7 @@ export interface operations {
         /**
          * @description Send one on every write. A retry carrying the same key returns the FIRST response instead of doing the work twice — without it, a client that times out and retries schedules the post a second time, and the first is already queued.
          *
-         *     Any string up to 255 characters; a UUID per logical operation is the usual choice. Keys are scoped to your workspace and honoured for 24 hours. The same key with a different body is a `422`; a request still running under this key is a `409 request_in_progress`.
+         *     Any string up to 255 characters; a UUID per logical operation is the usual choice. Keys are scoped to your workspace and honoured for 24 hours. The same key on a different route or id, or with a different body, is a `422`; a request still running under this key is a `409 request_in_progress`.
          *
          *     What a FAILED request does to its key depends on whether it could have changed anything. A `4xx` releases it — every one of them is raised before we write a thing, so fix the input and retry with the same key. A `5xx` pins it, and the retry replays that failure instead of doing the work: a write is several posts and several workflows, so a fault partway through leaves some of them done, and a fresh attempt would publish those a second time. Read `GET /posts/{id}` to see what exists, then continue with a new key.
          */
@@ -5515,7 +5542,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description This `Idempotency-Key` was already used with a different request body (`error.field` is `Idempotency-Key`). Replaying the stored response would silently discard what you just asked for, so it is refused instead. `platform_refused`: the platform understood the call and said no, in the words of the message (comments turned off on the post, a locked thread, an app access level that can’t search). The same call will be refused again. */
+      /** @description This `Idempotency-Key` was already used with a different request: another route, another id or another body (`error.field` is `Idempotency-Key`). Replaying the stored response would silently discard what you just asked for, so it is refused instead. `platform_refused`: the platform understood the call and said no, in the words of the message (comments turned off on the post, a locked thread, an app access level that can’t search). The same call will be refused again. */
       422: {
         headers: {
           [name: string]: unknown;
@@ -5648,7 +5675,7 @@ export interface operations {
         /**
          * @description Send one on every write. A retry carrying the same key returns the FIRST response instead of doing the work twice — without it, a client that times out and retries schedules the post a second time, and the first is already queued.
          *
-         *     Any string up to 255 characters; a UUID per logical operation is the usual choice. Keys are scoped to your workspace and honoured for 24 hours. The same key with a different body is a `422`; a request still running under this key is a `409 request_in_progress`.
+         *     Any string up to 255 characters; a UUID per logical operation is the usual choice. Keys are scoped to your workspace and honoured for 24 hours. The same key on a different route or id, or with a different body, is a `422`; a request still running under this key is a `409 request_in_progress`.
          *
          *     What a FAILED request does to its key depends on whether it could have changed anything. A `4xx` releases it — every one of them is raised before we write a thing, so fix the input and retry with the same key. A `5xx` pins it, and the retry replays that failure instead of doing the work: a write is several posts and several workflows, so a fault partway through leaves some of them done, and a fresh attempt would publish those a second time. Read `GET /posts/{id}` to see what exists, then continue with a new key.
          */
@@ -5711,7 +5738,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description This `Idempotency-Key` was already used with a different request body (`error.field` is `Idempotency-Key`). Replaying the stored response would silently discard what you just asked for, so it is refused instead. `platform_refused`: the platform understood the call and said no, in the words of the message (comments turned off on the post, a locked thread, an app access level that can’t search). The same call will be refused again. */
+      /** @description This `Idempotency-Key` was already used with a different request: another route, another id or another body (`error.field` is `Idempotency-Key`). Replaying the stored response would silently discard what you just asked for, so it is refused instead. `platform_refused`: the platform understood the call and said no, in the words of the message (comments turned off on the post, a locked thread, an app access level that can’t search). The same call will be refused again. */
       422: {
         headers: {
           [name: string]: unknown;
@@ -5943,7 +5970,7 @@ export interface operations {
         /**
          * @description Send one on every write. A retry carrying the same key returns the FIRST response instead of doing the work twice — without it, a client that times out and retries schedules the post a second time, and the first is already queued.
          *
-         *     Any string up to 255 characters; a UUID per logical operation is the usual choice. Keys are scoped to your workspace and honoured for 24 hours. The same key with a different body is a `422`; a request still running under this key is a `409 request_in_progress`.
+         *     Any string up to 255 characters; a UUID per logical operation is the usual choice. Keys are scoped to your workspace and honoured for 24 hours. The same key on a different route or id, or with a different body, is a `422`; a request still running under this key is a `409 request_in_progress`.
          *
          *     What a FAILED request does to its key depends on whether it could have changed anything. A `4xx` releases it — every one of them is raised before we write a thing, so fix the input and retry with the same key. A `5xx` pins it, and the retry replays that failure instead of doing the work: a write is several posts and several workflows, so a fault partway through leaves some of them done, and a fresh attempt would publish those a second time. Read `GET /posts/{id}` to see what exists, then continue with a new key.
          */
@@ -5993,7 +6020,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description This `Idempotency-Key` was already used with a different request body (`error.field` is `Idempotency-Key`). Replaying the stored response would silently discard what you just asked for, so it is refused instead. `platform_refused`: the platform understood the call and said no, in the words of the message (comments turned off on the post, a locked thread, an app access level that can’t search). The same call will be refused again. */
+      /** @description This `Idempotency-Key` was already used with a different request: another route, another id or another body (`error.field` is `Idempotency-Key`). Replaying the stored response would silently discard what you just asked for, so it is refused instead. `platform_refused`: the platform understood the call and said no, in the words of the message (comments turned off on the post, a locked thread, an app access level that can’t search). The same call will be refused again. */
       422: {
         headers: {
           [name: string]: unknown;

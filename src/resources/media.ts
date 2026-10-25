@@ -52,6 +52,9 @@ export class Media extends APIResource {
   /**
    * Upload a large video through an upload session: start it, PUT every part to its
    * signed URL, then complete it. The session is aborted if any step fails.
+   *
+   * An `idempotencyKey` passed here is split per step (`<key>:start`, `<key>:complete`),
+   * since the API holds a key to one route. Keep it under 246 characters so both fit.
    */
   async uploadMultipart(
     file: Uploadable,
@@ -64,7 +67,10 @@ export class Media extends APIResource {
     if (!fileName) throw new TypeError('`fileName` is required unless `file` is a File.');
     if (!mimeType) throw new TypeError('`mimeType` is required when the Blob has no type.');
 
-    const session = await this.uploads.start({ fileName, mimeType, size: blob.size }, options);
+    const session = await this.uploads.start(
+      { fileName, mimeType, size: blob.size },
+      stepOptions(options, 'start'),
+    );
     const concurrency = Math.max(1, Math.min(params.concurrency ?? 4, 100));
 
     try {
@@ -72,10 +78,15 @@ export class Media extends APIResource {
       // Signed URLs expire after an hour, so sign each batch just before uploading it.
       for (let i = 0; i < partNumbers.length; i += concurrency) {
         const batch = partNumbers.slice(i, i + concurrency);
-        const parts = await this.uploads.signParts(session.id, { partNumbers: batch }, options);
+        // Signing changes nothing, so each batch gets a fresh key of its own.
+        const parts = await this.uploads.signParts(
+          session.id,
+          { partNumbers: batch },
+          { ...options, idempotencyKey: undefined },
+        );
         await Promise.all(parts.map((part) => this.#putPart(blob, session, part, options?.signal)));
       }
-      return await this.uploads.complete(session.id, options);
+      return await this.uploads.complete(session.id, stepOptions(options, 'complete'));
     } catch (error) {
       await this.uploads.abort(session.id).catch(() => undefined);
       throw error;
@@ -138,4 +149,13 @@ function toBlob(file: Uploadable, type: string | undefined): Blob {
       ? new Uint8Array(file)
       : new Uint8Array(file.buffer, file.byteOffset, file.byteLength).slice();
   return new Blob([bytes as Uint8Array<ArrayBuffer>], type ? { type } : {});
+}
+
+/** The caller's key for one step of a multi-request call, or the options untouched. */
+function stepOptions(
+  options: RequestOptions | undefined,
+  step: string,
+): RequestOptions | undefined {
+  if (!options?.idempotencyKey) return options;
+  return { ...options, idempotencyKey: `${options.idempotencyKey}:${step}` };
 }
