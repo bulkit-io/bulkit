@@ -29,6 +29,21 @@ describe('cursor pagination', () => {
     expect(requests.every((r) => r.url.searchParams.get('limit') === '2')).toBe(true);
   });
 
+  it('pages the media library the same way', async () => {
+    const { client, requests } = mockClient([
+      () => page(['m1', 'm2'], 'cur_2'),
+      () => page(['m3'], null),
+    ]);
+
+    const ids: string[] = [];
+    for await (const item of client.media.list({ limit: 2 })) ids.push(item.id);
+
+    expect(ids).toEqual(['m1', 'm2', 'm3']);
+    expect(requests.every((r) => r.url.pathname.endsWith('/media'))).toBe(true);
+    expect(requests.map((r) => r.url.searchParams.get('cursor'))).toEqual([null, 'cur_2']);
+    expect(requests.every((r) => r.url.searchParams.get('limit') === '2')).toBe(true);
+  });
+
   it('pages manually', async () => {
     const { client } = mockClient([() => page(['a'], 'cur_2'), () => page(['b'], null)]);
     const first = await client.webhooks.deliveries('whk_1');

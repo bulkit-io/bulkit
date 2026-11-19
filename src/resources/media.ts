@@ -1,9 +1,16 @@
 import type { RequestOptions } from '../client';
 import type { APIPromise } from '../core/api-promise';
 import { APIConnectionError } from '../core/errors';
+import type { PagePromise } from '../core/pagination';
 import { APIResource } from '../core/resource';
 import { path } from '../core/utils';
-import type { MediaItem, MediaUpload, MediaUploadPart, MediaUploadStartParams } from '../types';
+import type {
+  MediaItem,
+  MediaListParams,
+  MediaUpload,
+  MediaUploadPart,
+  MediaUploadStartParams,
+} from '../types';
 
 /**
  * Anything that holds a file's bytes. In Node, `await fs.openAsBlob(filePath)` gives you a
@@ -26,9 +33,16 @@ export interface MultipartUploadParams extends MediaUploadParams {
 export class Media extends APIResource {
   readonly uploads: MediaUploads = new MediaUploads(this._client);
 
-  /** The workspace's media library. */
-  list(options?: RequestOptions): APIPromise<MediaItem[]> {
-    return this._client.get('/media', undefined, options);
+  /**
+   * The workspace's media library, newest first. Await it for one page, or iterate it
+   * for every file:
+   *
+   * ```ts
+   * for await (const item of bulkit.media.list()) { ... }
+   * ```
+   */
+  list(params?: MediaListParams, options?: RequestOptions): PagePromise<MediaItem> {
+    return this._client.getPage('/media', params, options);
   }
 
   /**

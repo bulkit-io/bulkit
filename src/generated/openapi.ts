@@ -17,7 +17,7 @@ export interface paths {
      *
      *     Check `needsReconnect` before scheduling. A post to a channel in that state is accepted and then fails at publish time, because only a human in a browser can re-authorize it.
      *
-     *     Connecting an account is deliberately not on this API — it is an interactive OAuth flow ending in a redirect, so it cannot be driven by a key. Customers connect in the app and automate against what they connected.
+     *     Connecting an account is deliberately not on this API. It is an interactive OAuth flow ending in a redirect, so it cannot be driven by a key. Customers connect in the app and automate against what they connected.
      */
     get: operations['PublicChannelsController_list'];
     put?: never;
@@ -83,7 +83,7 @@ export interface paths {
     };
     /**
      * List the media library
-     * @description Every `url` here is short-lived and minted fresh per response — key anything durable off `id`, which is also what a post’s `blocks[].mediaIds` references.
+     * @description Newest first, a page at a time, in the same envelope as `GET /posts`. Every `url` here is short-lived and minted fresh per response, so key anything durable off `id`, which is also what a post’s `blocks[].mediaIds` references.
      */
     get: operations['PublicMediaController_list'];
     put?: never;
@@ -93,7 +93,7 @@ export interface paths {
      *
      *     Bytes are proxied through the API rather than handed a presigned bucket URL, so the server sees the real content: a file whose bytes disagree with its declared type is rejected here rather than at publish time.
      *
-     *     JPEG, PNG, WebP, GIF, MP4, MOV, PDF, VTT or SRT. Images up to 10 MB, video and PDFs up to 100 MB, subtitle files up to 5 MB. A larger video goes through `POST /media/uploads`. Uploads count against the plan’s storage allowance, which is a stock — deleting a file frees it immediately.
+     *     JPEG, PNG, WebP, GIF, MP4, MOV, PDF, VTT or SRT. Images up to 10 MB, video and PDFs up to 100 MB, subtitle files up to 5 MB. A larger video goes through `POST /media/uploads`. Uploads count against the plan’s storage allowance, which is a stock: deleting a file frees it immediately.
      */
     post: operations['PublicMediaController_upload'];
     delete?: never;
@@ -220,7 +220,7 @@ export interface paths {
     };
     /**
      * List platform capabilities
-     * @description Character counts, attachments per block, thread length and whether media is mandatory — served live from the same declarations this API validates against.
+     * @description Character counts, attachments per block, thread length and whether media is mandatory, served live from the same declarations this API validates against.
      *
      *     Read these rather than hardcoding them. A client carrying its own copy of "280" will be wrong before we are, and it surfaces as a rejected post rather than a stale constant.
      *
@@ -252,13 +252,13 @@ export interface paths {
      * Create a submission
      * @description One call, one submission, however many channels. Sending this once per channel instead produces that many unrelated submissions, each with its own id and schedule.
      *
-     *     `intent: "now"` is **asynchronous** — the response comes back `publishing`, not published. Poll `GET /posts/{id}` for the outcome.
+     *     `intent: "now"` is **asynchronous**: the response comes back `publishing`, not published. Poll `GET /posts/{id}` for the outcome.
      *
-     *     Every channel is validated against its own platform’s rules — and your allowance checked — before anything is written. So a REFUSAL is total: a `4xx` here created nothing, and there is no state where two of four channels exist because the third had a typo.
+     *     Every channel is validated against its own platform’s rules (and your allowance checked) before anything is written. So a REFUSAL is total: a `4xx` here created nothing, and there is no state where two of four channels exist because the third had a typo.
      *
-     *     The write itself is one transaction, so a database failure is total too — there is no half-written submission.
+     *     The write itself is one transaction, so a database failure is total too: there is no half-written submission.
      *
-     *     SCHEDULING is where the channels stop being one thing: each gets its own workflow, and an outage while starting the fourth must not unschedule three that are already correct. So a submission where some channels started comes back **2xx with the failures per channel** — that channel reads `failed` and carries the reason — rather than as a blanket error. Retry it by sending the submission again to `PUT /posts/{id}`, which reschedules the failed channels without duplicating the ones that worked. Only a submission where EVERY channel failed to start is a `503`.
+     *     SCHEDULING is where the channels stop being one thing: each gets its own workflow, and an outage while starting the fourth must not unschedule three that are already correct. So a submission where some channels started comes back **2xx with the failures per channel** (that channel reads `failed` and carries the reason) rather than as a blanket error. Retry it by sending the submission again to `PUT /posts/{id}`, which reschedules the failed channels without duplicating the ones that worked. Only a submission where EVERY channel failed to start is a `503`.
      *
      *     Send an `Idempotency-Key` regardless: on that `503` the retry replays the failure instead of creating the submission twice, and `GET /posts` shows what exists.
      */
@@ -278,14 +278,14 @@ export interface paths {
     };
     /**
      * Get one submission
-     * @description Every channel it went to and every block of each. This is what you poll after `intent: "now"` — publishing is asynchronous, so the create response tells you it was queued and this tells you what happened.
+     * @description Every channel it went to and every block of each. This is what you poll after `intent: "now"`. Publishing is asynchronous, so the create response tells you it was queued and this tells you what happened.
      */
     get: operations['PublicPostsController_get'];
     /**
      * Replace a submission
      * @description A full resubmission, not a patch. The server reconciles the difference: a channel absent from the body is removed and its timer terminated, a new one is created and scheduled.
      *
-     *     That is why this is a PUT — a partial body would delete every channel it did not mention. Send the whole submission every time.
+     *     That is why this is a PUT: a partial body would delete every channel it did not mention. Send the whole submission every time.
      *
      *     Only channels the edit ADDS count against your posts allowance; re-saving the ones already there is free, so fixing a typo never costs an allowance.
      *
@@ -370,13 +370,13 @@ export interface paths {
      * Get one submission’s engagement over time
      * @description Every reading the sweep has stored for this submission, per channel, oldest first. `GET /public/v1/stats` sums the LATEST reading of many publications over a window; this is every reading of one.
      *
-     *     CUMULATIVE, NOT PER-INTERVAL. Each reading is the platform’s running total at that instant, so a curve only climbs — a drop between two readings is real and means people undid something. The engagement gained BETWEEN two captures is their difference; this endpoint does not send it.
+     *     CUMULATIVE, NOT PER-INTERVAL. Each reading is the platform’s running total at that instant, so a curve only climbs, and a drop between two readings is real and means people undid something. The engagement gained BETWEEN two captures is their difference; this endpoint does not send it.
      *
      *     THE POINTS ARE NOT EVENLY SPACED. Sampling decays: roughly hourly for the first day, daily for a week, weekly out to thirty days, then it stops for good. Plot against `capturedAt` and never against the index, and read a month-old post as frozen at its last reading rather than as having stopped earning.
      *
-     *     AN ABSENT METRIC IS NOT A ZERO, exactly as on `/stats`. A key missing from a reading’s `values` was not reported at that capture — most platforms simply do not measure most metrics.
+     *     AN ABSENT METRIC IS NOT A ZERO, exactly as on `/stats`. A key missing from a reading’s `values` was not reported at that capture: most platforms simply do not measure most metrics.
      *
-     *     A channel with an empty `readings` is the normal case, not an error, and this endpoint deliberately does not say which of the three reasons applies: the platform reports nothing to us, the connection was authorized before we asked for the read permission, or the post has not been swept yet. All three are facts about the CHANNEL — join `channelId` against `metricsStatus` on `GET /public/v1/channels`.
+     *     A channel with an empty `readings` is the normal case, not an error, and this endpoint deliberately does not say which of the three reasons applies: the platform reports nothing to us, the connection was authorized before we asked for the read permission, or the post has not been swept yet. All three are facts about the CHANNEL, so join `channelId` against `metricsStatus` on `GET /public/v1/channels`.
      */
     get: operations['PublicPostsController_metrics'];
     put?: never;
@@ -398,11 +398,11 @@ export interface paths {
     put?: never;
     /**
      * Publish now, or retry
-     * @description Queues every channel of this submission that has not already published. The ones that have are skipped rather than re-published, which is what makes this safe to call on a `partially_published` submission — it finishes the job instead of duplicating the part that worked.
+     * @description Queues every channel of this submission that has not already published. The ones that have are skipped rather than re-published, which is what makes this safe to call on a `partially_published` submission: it finishes the job instead of duplicating the part that worked.
      *
      *     Asynchronous, like `intent: "now"`: this returns once the work is durably queued.
      *
-     *     A write, despite reading like an action — a read-only key is refused here.
+     *     A write, despite reading like an action: a read-only key is refused here.
      */
     post: operations['PublicPostsController_publish'];
     delete?: never;
@@ -424,9 +424,9 @@ export interface paths {
      * Retract a submission
      * @description Deletes each channel’s copy **on its platform**, then removes our record of the channels that came down. This is the one that takes a published post down; `DELETE` below does not.
      *
-     *     Not every channel can be retracted, so this always answers `200` with two lists rather than a bare success. `removed` is gone from the platform and from here; `remaining` is still live, each entry carrying a sentence saying why — the platform offers no delete at all (`supportsRemoteDelete` on `GET /platforms`), this connection was never granted the permission (`manageStatus` on `GET /channels`), or the platform refused.
+     *     Not every channel can be retracted, so this always answers `200` with two lists rather than a bare success. `removed` is gone from the platform and from here; `remaining` is still live, each entry carrying a sentence saying why: the platform offers no delete at all (`supportsRemoteDelete` on `GET /platforms`), this connection was never granted the permission (`manageStatus` on `GET /channels`), or the platform refused.
      *
-     *     A non-empty `remaining` means the submission still exists, holding exactly those channels — so `GET /posts/{id}` keeps working and calling this again retracts what is left. Retracting is idempotent for that reason.
+     *     A non-empty `remaining` means the submission still exists, holding exactly those channels, so `GET /posts/{id}` keeps working and calling this again retracts what is left. Retracting is idempotent for that reason.
      *
      *     Channels that never published are simply cancelled and removed, so a half-published submission can be retracted as one thing.
      */
@@ -450,9 +450,9 @@ export interface paths {
      * Revise a published submission
      * @description Rewrites the copy that is **live on each platform**. Use this on a submission that has already published; use `PUT /posts/{id}` on one that has not.
      *
-     *     **A revision changes wording, never structure.** Send every channel and every block of each thread, in order, including the ones that did not change — the channel list and each thread’s length must match what was published. Adding a block is publishing a reply, removing one is a delete, and adding a channel is a new post; all three come back as `revision_structure_changed`.
+     *     **A revision changes wording, never structure.** Send every channel and every block of each thread, in order, including the ones that did not change. The channel list and each thread’s length must match what was published. Adding a block is publishing a reply, removing one is a delete, and adding a channel is a new post; all three come back as `revision_structure_changed`.
      *
-     *     What each platform will change is `limits.remoteEdit` on `GET /platforms`. Sending a part it does not list — a title to a platform that only rewrites text — is `edit_not_supported`, and nothing is sent. **No platform will change a published post’s attachments**, which is why there is no field for them here.
+     *     What each platform will change is `limits.remoteEdit` on `GET /platforms`. Sending a part it does not list (a title to a platform that only rewrites text) is `edit_not_supported`, and nothing is sent. **No platform will change a published post’s attachments**, which is why there is no field for them here.
      *
      *     Only blocks whose text actually differs are sent, so an unchanged block never puts an "edited" marker on a post nobody touched. Answers two lists for the same reason retract does: `revised` reached its platform, and `unchanged` either had nothing to send (`reason` is null) or was refused by the platform (`reason` says how).
      */
@@ -472,21 +472,21 @@ export interface paths {
     };
     /**
      * Get publishing stats
-     * @description Publications per day, per channel, per tag and in total, over a window you name. A publication is one submission going to one channel — a post sent to three accounts counts three times, and a five-block thread counts once.
+     * @description Publications per day, per channel, per tag and in total, over a window you name. A publication is one submission going to one channel: a post sent to three accounts counts three times, and a five-block thread counts once.
      *
-     *     ANALYTICS, NOT BILLING. These are counted from the posts themselves, so deleting a post changes the history: the figures can go down. Use `GET /public/v1/usage` for anything commercial — it reads the meter an invoice is computed from, and it is the only endpoint that predicts a `402`.
+     *     ANALYTICS, NOT BILLING. These are counted from the posts themselves, so deleting a post changes the history: the figures can go down. Use `GET /public/v1/usage` for anything commercial. It reads the meter an invoice is computed from, and it is the only endpoint that predicts a `402`.
      *
      *     `totals`, `daily`, `channels` and `tags` describe the window. `queue` is a snapshot of right now and ignores `from`/`to` entirely.
      *
      *     Every channel connected right now appears in `channels`, including those that published nothing. Publications whose account has since been disconnected collect in a single row with a null `channelId`, so the per-channel figures always sum to `totals`.
      *
-     *     `tags` behaves differently on purpose, and the difference matters: only tags something landed under appear, and the counts OVERLAP. A publication carrying two tags is counted under both, one carrying none under neither — so unlike `channels`, these do not sum to `totals` and must not be rendered as shares of it.
+     *     `tags` behaves differently on purpose, and the difference matters: only tags something landed under appear, and the counts OVERLAP. A publication carrying two tags is counted under both, one carrying none under neither, so unlike `channels`, these do not sum to `totals` and must not be rendered as shares of it.
      *
-     *     ENGAGEMENT IS A DIFFERENT KIND OF NUMBER from everything above. `engagement` on the response, and on each channel and tag, is what the PLATFORMS reported back — likes, comments, shares and whatever else each one measures — rather than something counted from our own rows. Three consequences follow, and all three matter before you build on it:
+     *     ENGAGEMENT IS A DIFFERENT KIND OF NUMBER from everything above. `engagement` on the response, and on each channel and tag, is what the PLATFORMS reported back (likes, comments, shares and whatever else each one measures) rather than something counted from our own rows. Three consequences follow, and all three matter before you build on it:
      *
      *     1. It is PARTIAL. Engagement is only read back from platforms that expose it, so a workspace publishing to several may have figures for some channels and none for others. `engagement.measured` is how many publications carried any reading at all; compare it against `totals.published` before presenting a figure as covering the window.
      *     2. AN ABSENT METRIC IS NOT A ZERO. `engagement.values` carries a key only where something reported it. No two platforms measure the same set, so a missing `impressions` means nobody could answer, not that nobody saw the post. `metrics` lists every name present in the response.
-     *     3. The values are CUMULATIVE and still moving. Each is the latest reading of a publication since it went out — not what it earned during the window — and it changes when somebody likes or unlikes the post. Readings are sampled for roughly the first month of a post’s life and then stop.
+     *     3. The values are CUMULATIVE and still moving. Each is the latest reading of a publication since it went out, not what it earned during the window, and it changes when somebody likes or unlikes the post. Readings are sampled for roughly the first month of a post’s life and then stop.
      */
     get: operations['PublicStatsController_get'];
     put?: never;
@@ -534,13 +534,13 @@ export interface paths {
     };
     /**
      * List tags
-     * @description The workspace’s own labels for its submissions — `launch-week`, `client-acme`, `evergreen`. An `id` from here is what `tagIds` takes when you create a submission, and what `?tag=` filters on when you list them.
+     * @description The workspace’s own labels for its submissions, such as `launch-week`, `client-acme` and `evergreen`. An `id` from here is what `tagIds` takes when you create a submission, and what `?tag=` filters on when you list them.
      *
      *     These are ours, not any platform’s. A tag is not a hashtag: it is never published, never sent to a provider, and never appears in a post’s text. It exists so you can ask the questions the workspace organizes its work around.
      *
      *     Address them by `id`, never by `name`. The name is the one field a workspace edits, so a client that matched on the word would silently stop matching the day somebody fixed a typo.
      *
-     *     Creating and deleting tags is deliberately not on this API — they are a human’s filing system, and a scripted typo should not become a permanent entry in somebody’s dropdown. Manage them in the app.
+     *     Creating and deleting tags is deliberately not on this API: they are a human’s filing system, and a scripted typo should not become a permanent entry in somebody’s dropdown. Manage them in the app.
      */
     get: operations['PublicTagsController_list'];
     put?: never;
@@ -560,13 +560,13 @@ export interface paths {
     };
     /**
      * Get current usage
-     * @description What your account has consumed this period and what its plan allows — read from the meter an invoice is computed from, so this number and the bill are the same number by construction.
+     * @description What your account has consumed this period and what its plan allows, read from the meter an invoice is computed from, so this number and the bill are the same number by construction.
      *
-     *     Figures cover the whole ACCOUNT, not just the workspace this key belongs to. A plan is bought once, and every workspace its owner owns draws from one pool — so this is what will refuse your next write even when the workspace you are writing to has barely been used.
+     *     Figures cover the whole ACCOUNT, not just the workspace this key belongs to. A plan is bought once, and every workspace its owner owns draws from one pool, so this is what will refuse your next write even when the workspace you are writing to has barely been used.
      *
      *     Poll it to predict a `402`: `posts.created.used` against `posts.created.limit` is what refuses the next write, and `periodEnd` is when it resets.
      *
-     *     `channels` and `storage` have no period — they are stocks, freed the moment you disconnect an account or delete a file.
+     *     `channels` and `storage` have no period: they are stocks, freed the moment you disconnect an account or delete a file.
      *
      *     Requires the `read` scope explicitly, unlike the other reads on this API: consumption is commercial information about the workspace rather than your own content, and a key handed to a third party to publish posts has no business reading how close its owner is to a billing limit.
      */
@@ -588,13 +588,13 @@ export interface paths {
     };
     /**
      * List webhook endpoints
-     * @description Every endpoint registered for this workspace, newest first, including disabled ones — an endpoint we switched off after repeated failures is exactly the one you came here to find.
+     * @description Every endpoint registered for this workspace, newest first, including disabled ones: an endpoint we switched off after repeated failures is exactly the one you came here to find.
      */
     get: operations['PublicWebhooksController_list'];
     put?: never;
     /**
      * Register a webhook endpoint
-     * @description Registers a URL and returns its **signing secret**. Store the secret now: only an encrypted copy is kept, no route returns it, and the only way to get another is `POST /webhooks/{id}/roll-secret` — which invalidates this one.
+     * @description Registers a URL and returns its **signing secret**. Store the secret now: only an encrypted copy is kept, no route returns it, and the only way to get another is `POST /webhooks/{id}/roll-secret`, which invalidates this one.
      *
      *     Every delivery is signed with it. Verifying is not optional in any real sense: this URL is reachable by anyone on the internet, so an unverified handler acts on whatever a stranger posts to it. See the **Webhooks** section of this reference for the scheme and a working verifier.
      *
@@ -618,7 +618,7 @@ export interface paths {
     get: operations['PublicWebhooksController_get'];
     /**
      * Update a webhook endpoint
-     * @description Only the fields you send are changed. This is a partial update despite being a PUT — an endpoint is a URL, a subscription list and a switch, with no parts to reconcile, so there is no half-state a partial body could leave behind. (`PUT /posts/{id}` is a full resubmission for exactly the opposite reason.)
+     * @description Only the fields you send are changed. This is a partial update despite being a PUT: an endpoint is a URL, a subscription list and a switch, with no parts to reconcile, so there is no half-state a partial body could leave behind. (`PUT /posts/{id}` is a full resubmission for exactly the opposite reason.)
      *
      *     The signing secret is not touched. Re-enabling an endpoint we disabled also clears its failure streak, so a fixed receiver is not one flake away from being switched off again.
      */
@@ -626,7 +626,7 @@ export interface paths {
     post?: never;
     /**
      * Delete a webhook endpoint
-     * @description Deliveries still queued for it stop. Its history goes with it, so export anything you need from `GET /webhooks/{id}/deliveries` first — if you only want to pause, set `enabled: false` instead and keep the id and the secret.
+     * @description Deliveries still queued for it stop. Its history goes with it, so export anything you need from `GET /webhooks/{id}/deliveries` first. If you only want to pause, set `enabled: false` instead and keep the id and the secret.
      */
     delete: operations['PublicWebhooksController_remove'];
     options?: never;
@@ -645,7 +645,7 @@ export interface paths {
      * List delivery attempts
      * @description Every event this endpoint was sent, newest first, with how many attempts it took and what came back. This is the evidence behind "did you send it?".
      *
-     *     `responseStatus` is your server’s own HTTP status. Your response BODY is never stored or returned — the URL is customer-supplied and we deliver from inside our network, so echoing back what it returned would make this a way of reading anything we can reach. `error` is our description of the failure, in our words.
+     *     `responseStatus` is your server’s own HTTP status. Your response BODY is never stored or returned. The URL is customer-supplied and we deliver from inside our network, so echoing back what it returned would make this a way of reading anything we can reach. `error` is our description of the failure, in our words.
      *
      *     A `pending` delivery is one that has not been accepted yet and may still be retried; `failed` means the retry budget is spent and nothing more will be attempted.
      */
@@ -673,7 +673,7 @@ export interface paths {
      *
      *     There is a gap by construction: deliveries already in flight are signed with whatever is stored when each attempt is made, so a redelivery your receiver was still waiting on may arrive signed with the new secret. Accept both for a few minutes when you roll.
      *
-     *     A write, despite reading like an action — a read-only key is refused here.
+     *     A write, despite reading like an action: a read-only key is refused here.
      */
     post: operations['PublicWebhooksController_rollSecret'];
     delete?: never;
@@ -713,7 +713,7 @@ export interface components {
     /** @description An attachment carried by one block of a post. */
     Attachment: {
       /**
-       * @description Media library id. The stable identifier — key durable state off this.
+       * @description Media library id. The stable identifier: key durable state off this.
        * @example clx3k2p9q0001abcd1234efgh
        */
       id: string;
@@ -770,16 +770,16 @@ export interface components {
       /**
        * @description Whether engagement figures are collected for this channel.
        *
-       *     `reporting` — they are, and `GET /public/v1/stats` carries them. `needs-reconnect` — the platform reports engagement but this connection was authorized before the read permission was requested; only the account owner re-authorizing in the app grants it, and no API call can. `unsupported` — the platform does not report engagement to this API at all.
+       *     `reporting`: they are, and `GET /public/v1/stats` carries them. `needs-reconnect`: the platform reports engagement but this connection was authorized before the read permission was requested; only the account owner re-authorizing in the app grants it, and no API call can. `unsupported`: the platform does not report engagement to this API at all.
        *
        *     Read it before drawing a conclusion from a channel contributing no engagement to `GET /public/v1/stats`: anything other than `reporting` is a gap in COVERAGE, not a finding about the posts.
        * @enum {string}
        */
       metricsStatus: 'reporting' | 'needs-reconnect' | 'unsupported';
       /**
-       * @description Whether a post already published to this channel can be taken down or rewritten — what `POST /public/v1/posts/{id}/retract` and `POST /public/v1/posts/{id}/revise` can actually do here.
+       * @description Whether a post already published to this channel can be taken down or rewritten: what `POST /public/v1/posts/{id}/retract` and `POST /public/v1/posts/{id}/revise` can actually do here.
        *
-       *     `available` — they can, under the permissions this connection holds. `needs-reconnect` — the platform allows it, but this connection was authorized before the permission was requested; only the account owner re-authorizing in the app grants it. `unsupported` — the platform offers no way to reach a post once it is out, so a copy published here is permanent.
+       *     `available`: they can, under the permissions this connection holds. `needs-reconnect`: the platform allows it, but this connection was authorized before the permission was requested; only the account owner re-authorizing in the app grants it. `unsupported`: the platform offers no way to reach a post once it is out, so a copy published here is permanent.
        *
        *     Read it BEFORE telling a user a post can be recalled. This is the one field here whose false answer nobody can fix: `unsupported` is a property of the platform, not of the connection.
        * @enum {string}
@@ -788,7 +788,7 @@ export interface components {
       /**
        * @description Whether this channel may publish a `blocks` entry after the first.
        *
-       *     `available` — it may, up to `limits.maxBlocks` on `GET /public/v1/platforms`. `needs-reconnect` — the platform chains, but continuing a post needs a permission this connection was authorized before we requested it; a second block is refused with `continuation_not_granted`, and only the account owner re-authorizing in the app changes that. `unsupported` — the platform publishes one post and stops.
+       *     `available`: it may, up to `limits.maxBlocks` on `GET /public/v1/platforms`. `needs-reconnect`: the platform chains, but continuing a post needs a permission this connection was authorized before we requested it; a second block is refused with `continuation_not_granted`, and only the account owner re-authorizing in the app changes that. `unsupported`: the platform publishes one post and stops.
        *
        *     The pair to read with `limits.maxBlocks`: that number is the PLATFORM’s and this is the CONNECTION’s. A client trusting the first alone composes a thread that is accepted nowhere.
        * @enum {string}
@@ -865,18 +865,18 @@ export interface components {
          */
         minAspectRatio: number | null;
         /**
-         * @description Highest accepted width ÷ height, measured as the video plays — rotation is already applied, so a portrait phone clip counts as portrait.
+         * @description Highest accepted width ÷ height, measured as the video plays: rotation is already applied, so a portrait phone clip counts as portrait.
          * @example 10
          */
         maxAspectRatio: number | null;
         /**
-         * @description Most pixels one attachment may contain — width × height. Over it is `attachment_too_many_pixels`. Not a byte ceiling in disguise, and the reason it is worth checking before you upload: a 40 megapixel camera JPEG is only a few megabytes, so it satisfies every `maxBytes` here and is still refused. Nothing on this side resizes anything, so a picture over the cap needs saving smaller first.
+         * @description Most pixels one attachment may contain (width × height). Over it is `attachment_too_many_pixels`. Not a byte ceiling in disguise, and the reason it is worth checking before you upload: a 40 megapixel camera JPEG is only a few megabytes, so it satisfies every `maxBytes` here and is still refused. Nothing on this side resizes anything, so a picture over the cap needs saving smaller first.
          * @example 36152320
          */
         maxPixels: number | null;
-        /** @description True when the duration cap belongs to the connected ACCOUNT rather than the platform, so no number published here could be right for every channel — TikTok grants different creators different maximums. No endpoint will tell you the number: it's resolved when the post publishes, and an over-long video fails then with that account's real limit named in the error. */
+        /** @description True when the duration cap belongs to the connected ACCOUNT rather than the platform, so no number published here could be right for every channel: TikTok grants different creators different maximums. No endpoint will tell you the number: it's resolved when the post publishes, and an over-long video fails then with that account's real limit named in the error. */
         durationIsPerAccount: boolean;
-        /** @description Rules that differ by what the file IS, where one number could not be right for both kinds — Bluesky takes a 1 MB image and a 50 MB video, and a LinkedIn post carries one document OR up to twenty images. `null` on a platform that publishes no per-kind rule. All four kinds are always present when it isn't; a `null` entry means this platform states nothing about that kind, not that it refuses it — `acceptedMimeTypes` is what says which types publish at all. Nothing here widens `maxMedia`; it only narrows it further. */
+        /** @description Rules that differ by what the file IS, where one number could not be right for both kinds: Bluesky takes a 1 MB image and a 50 MB video, and a LinkedIn post carries one document OR up to twenty images. `null` on a platform that publishes no per-kind rule. All four kinds are always present when it isn't; a `null` entry means this platform states nothing about that kind, not that it refuses it; `acceptedMimeTypes` is what says which types publish at all. Nothing here widens `maxMedia`; it only narrows it further. */
         perKind: {
           /** @description What this platform allows for images specifically. Null when it publishes no rule about them. */
           image: {
@@ -886,14 +886,14 @@ export interface components {
              */
             maxCount: number | null;
             /**
-             * @description Largest ONE image may be, in bytes. Over it is `attachment_too_large`. The only media rule checked on every attachment — a stored file always has a size, where the duration and dimensions above are measured best-effort and are unknown for every image.
+             * @description Largest ONE image may be, in bytes. Over it is `attachment_too_large`. The only media rule checked on every attachment: a stored file always has a size, where the duration and dimensions above are measured best-effort and are unknown for every image.
              * @example 50000000
              */
             maxBytes: number | null;
             /** @description True when a image may not share a post with a file of any other kind. Mixing them is `attachment_kinds_mixed`. */
             alone: boolean;
             /**
-             * @description Lowest width ÷ height accepted for a image, where that differs from the platform-wide `minAspectRatio` above — it REPLACES that value for this kind rather than narrowing it. Null means the platform-wide one applies. Outside it is `attachment_aspect_unsupported`. Instagram is why: a feed image publishes between 4:5 and 1.91:1 where a video publishes between 0.01:1 and 10:1.
+             * @description Lowest width ÷ height accepted for a image, where that differs from the platform-wide `minAspectRatio` above. It REPLACES that value for this kind rather than narrowing it. Null means the platform-wide one applies. Outside it is `attachment_aspect_unsupported`. Instagram is why: a feed image publishes between 4:5 and 1.91:1 where a video publishes between 0.01:1 and 10:1.
              * @example 0.8
              */
             minAspectRatio: number | null;
@@ -903,7 +903,7 @@ export interface components {
              */
             maxAspectRatio: number | null;
             /**
-             * @description Most pixels ONE image may contain — width × height — where that differs from the platform-wide `maxPixels` above, which it REPLACES for this kind rather than narrowing. Null means the platform-wide one applies. Over it is `attachment_too_many_pixels`. LinkedIn is why it sits per kind: its image API refuses anything over 36,152,320 px and its video API publishes no pixel rule at all.
+             * @description Most pixels ONE image may contain (width × height) where that differs from the platform-wide `maxPixels` above, which it REPLACES for this kind rather than narrowing. Null means the platform-wide one applies. Over it is `attachment_too_many_pixels`. LinkedIn is why it sits per kind: its image API refuses anything over 36,152,320 px and its video API publishes no pixel rule at all.
              * @example 36152320
              */
             maxPixels: number | null;
@@ -916,14 +916,14 @@ export interface components {
              */
             maxCount: number | null;
             /**
-             * @description Largest ONE video may be, in bytes. Over it is `attachment_too_large`. The only media rule checked on every attachment — a stored file always has a size, where the duration and dimensions above are measured best-effort and are unknown for every image.
+             * @description Largest ONE video may be, in bytes. Over it is `attachment_too_large`. The only media rule checked on every attachment: a stored file always has a size, where the duration and dimensions above are measured best-effort and are unknown for every image.
              * @example 50000000
              */
             maxBytes: number | null;
             /** @description True when a video may not share a post with a file of any other kind. Mixing them is `attachment_kinds_mixed`. */
             alone: boolean;
             /**
-             * @description Lowest width ÷ height accepted for a video, where that differs from the platform-wide `minAspectRatio` above — it REPLACES that value for this kind rather than narrowing it. Null means the platform-wide one applies. Outside it is `attachment_aspect_unsupported`. Instagram is why: a feed image publishes between 4:5 and 1.91:1 where a video publishes between 0.01:1 and 10:1.
+             * @description Lowest width ÷ height accepted for a video, where that differs from the platform-wide `minAspectRatio` above. It REPLACES that value for this kind rather than narrowing it. Null means the platform-wide one applies. Outside it is `attachment_aspect_unsupported`. Instagram is why: a feed image publishes between 4:5 and 1.91:1 where a video publishes between 0.01:1 and 10:1.
              * @example 0.8
              */
             minAspectRatio: number | null;
@@ -933,7 +933,7 @@ export interface components {
              */
             maxAspectRatio: number | null;
             /**
-             * @description Most pixels ONE video may contain — width × height — where that differs from the platform-wide `maxPixels` above, which it REPLACES for this kind rather than narrowing. Null means the platform-wide one applies. Over it is `attachment_too_many_pixels`. LinkedIn is why it sits per kind: its image API refuses anything over 36,152,320 px and its video API publishes no pixel rule at all.
+             * @description Most pixels ONE video may contain (width × height) where that differs from the platform-wide `maxPixels` above, which it REPLACES for this kind rather than narrowing. Null means the platform-wide one applies. Over it is `attachment_too_many_pixels`. LinkedIn is why it sits per kind: its image API refuses anything over 36,152,320 px and its video API publishes no pixel rule at all.
              * @example 36152320
              */
             maxPixels: number | null;
@@ -946,14 +946,14 @@ export interface components {
              */
             maxCount: number | null;
             /**
-             * @description Largest ONE document may be, in bytes. Over it is `attachment_too_large`. The only media rule checked on every attachment — a stored file always has a size, where the duration and dimensions above are measured best-effort and are unknown for every image.
+             * @description Largest ONE document may be, in bytes. Over it is `attachment_too_large`. The only media rule checked on every attachment: a stored file always has a size, where the duration and dimensions above are measured best-effort and are unknown for every image.
              * @example 50000000
              */
             maxBytes: number | null;
             /** @description True when a document may not share a post with a file of any other kind. Mixing them is `attachment_kinds_mixed`. */
             alone: boolean;
             /**
-             * @description Lowest width ÷ height accepted for a document, where that differs from the platform-wide `minAspectRatio` above — it REPLACES that value for this kind rather than narrowing it. Null means the platform-wide one applies. Outside it is `attachment_aspect_unsupported`. Instagram is why: a feed image publishes between 4:5 and 1.91:1 where a video publishes between 0.01:1 and 10:1.
+             * @description Lowest width ÷ height accepted for a document, where that differs from the platform-wide `minAspectRatio` above. It REPLACES that value for this kind rather than narrowing it. Null means the platform-wide one applies. Outside it is `attachment_aspect_unsupported`. Instagram is why: a feed image publishes between 4:5 and 1.91:1 where a video publishes between 0.01:1 and 10:1.
              * @example 0.8
              */
             minAspectRatio: number | null;
@@ -963,12 +963,12 @@ export interface components {
              */
             maxAspectRatio: number | null;
             /**
-             * @description Most pixels ONE document may contain — width × height — where that differs from the platform-wide `maxPixels` above, which it REPLACES for this kind rather than narrowing. Null means the platform-wide one applies. Over it is `attachment_too_many_pixels`. LinkedIn is why it sits per kind: its image API refuses anything over 36,152,320 px and its video API publishes no pixel rule at all.
+             * @description Most pixels ONE document may contain (width × height) where that differs from the platform-wide `maxPixels` above, which it REPLACES for this kind rather than narrowing. Null means the platform-wide one applies. Over it is `attachment_too_many_pixels`. LinkedIn is why it sits per kind: its image API refuses anything over 36,152,320 px and its video API publishes no pixel rule at all.
              * @example 36152320
              */
             maxPixels: number | null;
           } | null;
-          /** @description Always null. A subtitle file is a kind the media library stores and never a kind a POST carries, so no platform has a rule about how many of them one may hold. Where a subtitle file reaches a platform is a `media` option — see YouTube’s `captionFile` — whose own `mimeTypes` and `maxBytes` are the rules that bind it. */
+          /** @description Always null. A subtitle file is a kind the media library stores and never a kind a POST carries, so no platform has a rule about how many of them one may hold. Where a subtitle file reaches a platform is a `media` option (see YouTube’s `captionFile`) whose own `mimeTypes` and `maxBytes` are the rules that bind it. */
           caption: {
             /**
              * @description Most subtitle files one post may carry, where that is tighter than `maxMedia`. Null means only `maxMedia` binds. Over it is `too_many_attachments_of_kind`.
@@ -976,14 +976,14 @@ export interface components {
              */
             maxCount: number | null;
             /**
-             * @description Largest ONE subtitle file may be, in bytes. Over it is `attachment_too_large`. The only media rule checked on every attachment — a stored file always has a size, where the duration and dimensions above are measured best-effort and are unknown for every image.
+             * @description Largest ONE subtitle file may be, in bytes. Over it is `attachment_too_large`. The only media rule checked on every attachment: a stored file always has a size, where the duration and dimensions above are measured best-effort and are unknown for every image.
              * @example 50000000
              */
             maxBytes: number | null;
             /** @description True when a subtitle file may not share a post with a file of any other kind. Mixing them is `attachment_kinds_mixed`. */
             alone: boolean;
             /**
-             * @description Lowest width ÷ height accepted for a subtitle file, where that differs from the platform-wide `minAspectRatio` above — it REPLACES that value for this kind rather than narrowing it. Null means the platform-wide one applies. Outside it is `attachment_aspect_unsupported`. Instagram is why: a feed image publishes between 4:5 and 1.91:1 where a video publishes between 0.01:1 and 10:1.
+             * @description Lowest width ÷ height accepted for a subtitle file, where that differs from the platform-wide `minAspectRatio` above. It REPLACES that value for this kind rather than narrowing it. Null means the platform-wide one applies. Outside it is `attachment_aspect_unsupported`. Instagram is why: a feed image publishes between 4:5 and 1.91:1 where a video publishes between 0.01:1 and 10:1.
              * @example 0.8
              */
             minAspectRatio: number | null;
@@ -993,14 +993,14 @@ export interface components {
              */
             maxAspectRatio: number | null;
             /**
-             * @description Most pixels ONE subtitle file may contain — width × height — where that differs from the platform-wide `maxPixels` above, which it REPLACES for this kind rather than narrowing. Null means the platform-wide one applies. Over it is `attachment_too_many_pixels`. LinkedIn is why it sits per kind: its image API refuses anything over 36,152,320 px and its video API publishes no pixel rule at all.
+             * @description Most pixels ONE subtitle file may contain (width × height) where that differs from the platform-wide `maxPixels` above, which it REPLACES for this kind rather than narrowing. Null means the platform-wide one applies. Over it is `attachment_too_many_pixels`. LinkedIn is why it sits per kind: its image API refuses anything over 36,152,320 px and its video API publishes no pixel rule at all.
              * @example 36152320
              */
             maxPixels: number | null;
           } | null;
         } | null;
         /**
-         * @description Rules for one exact MIME type, where the kind above is too coarse — `null` on a platform that publishes none, which is most of them. Keyed by the mime type as `media.mimeType` reports it. X is why it exists, and it needs every field: X takes "up to 4 photos, 1 animated GIF, or 1 video", where a GIF and a JPEG are both `image` — so the ceiling (15 MB of animation against 5 MB of still), the count and the exclusion are all facts about a type. `maxBytes` REPLACES the kind's ceiling for this file; `maxCount` is counted alongside the kind's cap rather than replacing it, since five images with one GIF among them are five of the kind and one of the type.
+         * @description Rules for one exact MIME type, where the kind above is too coarse (`null` on a platform that publishes none, which is most of them). Keyed by the mime type as `media.mimeType` reports it. X is why it exists, and it needs every field: X takes "up to 4 photos, 1 animated GIF, or 1 video", where a GIF and a JPEG are both `image`, so the ceiling (15 MB of animation against 5 MB of still), the count and the exclusion are all facts about a type. `maxBytes` REPLACES the kind's ceiling for this file; `maxCount` is counted alongside the kind's cap rather than replacing it, since five images with one GIF among them are five of the kind and one of the type.
          * @example {
          *       "image/jpeg": {
          *         "maxBytes": 5242880,
@@ -1028,10 +1028,10 @@ export interface components {
              * @example 1
              */
             maxCount: number | null;
-            /** @description True when a file of this type may not share a post with a file of any other type — its own kind included, which is what separates it from the per-kind flag. Mixing them is `attachment_types_mixed`. */
+            /** @description True when a file of this type may not share a post with a file of any other type, its own kind included, which is what separates it from the per-kind flag. Mixing them is `attachment_types_mixed`. */
             alone: boolean;
             /**
-             * @description What this platform calls a file of this type in a refusal — "GIF". Null where the kind name is the right word.
+             * @description What this platform calls a file of this type in a refusal: "GIF". Null where the kind name is the right word.
              * @example GIF
              */
             noun: string | null;
@@ -1044,6 +1044,11 @@ export interface components {
         /** Format: uri */
         avatarUrl: string | null;
       } | null;
+      /**
+       * @description Why this account can’t publish anything right now, such as a TikTok posting cap, in words for the user. Null when nothing is stopping it. Don’t publish to this channel until it clears: the platform refuses the post.
+       * @example This TikTok account has reached its posting limit for now. Try again later.
+       */
+      postingPaused: string | null;
     };
     /** @description One comment on a published post, read live from the platform. Nothing is stored: a comment deleted on the platform is gone here too. */
     Comment: {
@@ -1084,25 +1089,25 @@ export interface components {
       /** @description A link to the reply on the platform, where one can be built. */
       url: string | null;
     };
-    /** @description One block of the chain. Text, attachments, or both — a block with neither is refused as `content_empty`. */
+    /** @description One block of the chain. Text, attachments, or both. A block with neither is refused as `content_empty`. */
     CreatePostBlock: {
       /** @description The text. Optional: a block carrying `mediaIds` may omit it, which publishes the image with no caption. The per-platform ceiling is lower and comes from `GET /public/v1/platforms`; this is only the outer bound one request may carry. */
       content?: string;
-      /** @description Media ids from `POST /public/v1/media`, in publication order. Ownership is checked server-side — an id belonging to another workspace is refused, not silently ignored. */
+      /** @description Media ids from `POST /public/v1/media`, in publication order. Ownership is checked server-side: an id belonging to another workspace is refused, not silently ignored. */
       mediaIds?: string[];
       /**
-       * @description What each attachment shows, for a reader who cannot see it — keyed by the media id from `mediaIds` it describes. Overrides the description stored on the library item, so the same photo can read differently here. Omit a key to publish with whatever the library says; a key naming a file this block does not attach is `alt_text_unattached`. Accepted on every platform — `limits.supportsAltText` on GET /platforms says which of them will actually send it.
+       * @description What each attachment shows, for a reader who cannot see it, keyed by the media id from `mediaIds` it describes. Overrides the description stored on the library item, so the same photo can read differently here. Omit a key to publish with whatever the library says; a key naming a file this block does not attach is `alt_text_unattached`. Accepted on every platform; `limits.supportsAltText` on GET /platforms says which of them will actually send it.
        * @example {
-       *       "med_2f8a": "A hand-drawn logo on a pale background"
+       *       "clx3k2p9q0003abcd1234efgh": "A hand-drawn logo on a pale background"
        *     }
        */
       mediaAltText?: {
         [key: string]: string;
       };
       /**
-       * @description Who each attachment tags, keyed by the media id from `mediaIds` they are tagged on. READ THE OPPOSITE WAY FROM `mediaAltText` above: a description is accepted on every platform because it belongs to the file, while a handle is an account on one platform and the same characters name somebody else on the next — so this is refused as `user_tags_not_supported` on a channel whose `limits.userTags` is null, rather than accepted and dropped. That declaration also says how many one attachment may carry, which kinds of file take them, and whether a tag needs a point at all.
+       * @description Who each attachment tags, keyed by the media id from `mediaIds` they are tagged on. READ THE OPPOSITE WAY FROM `mediaAltText` above: a description is accepted on every platform because it belongs to the file, while a handle is an account on one platform and the same characters name somebody else on the next, so this is refused as `user_tags_not_supported` on a channel whose `limits.userTags` is null, rather than accepted and dropped. That declaration also says how many one attachment may carry, which kinds of file take them, and whether a tag needs a point at all.
        * @example {
-       *       "med_2f8a": [
+       *       "clx3k2p9q0003abcd1234efgh": [
        *         {
        *           "username": "ada",
        *           "x": 0.25,
@@ -1119,7 +1124,7 @@ export interface components {
            */
           username: string;
           /**
-           * @description Distance from the LEFT edge as a fraction of the width — 0.5 is the middle, whatever the picture was uploaded at. Not pixels: a fraction is what survives the platform re-encoding the file.
+           * @description Distance from the LEFT edge as a fraction of the width: 0.5 is the middle, whatever the picture was uploaded at. Not pixels: a fraction is what survives the platform re-encoding the file.
            * @example 0.25
            */
           x?: number;
@@ -1139,17 +1144,17 @@ export interface components {
        */
       channelId: string;
       /**
-       * @description The post’s title, for channels whose platform has one — check `limits.title` on `GET /public/v1/platforms`, which also carries the real cap (this `maxLength` is only the request’s outer bound). Required to publish where that field says `required`; drafts may go without. Sending it to a platform that has no title field is `title_not_supported`.
+       * @description The post’s title, for channels whose platform has one: check `limits.title` on `GET /public/v1/platforms`, which also carries the real cap (this `maxLength` is only the request’s outer bound). Required to publish where that field says `required`; drafts may go without. Sending it to a platform that has no title field is `title_not_supported`.
        * @example How we cut our build time in half
        */
       title?: string;
       /**
-       * @description Which KIND of thing to publish here, on platforms that publish more than one — an Instagram Story rather than a post on the grid. One of the `key`s in that platform’s `postTypes` on `GET /public/v1/platforms`; omit it for the default, which is what that platform’s top-level `limits` describes. A key it does not declare is `post_type_invalid`, and sending one at all where `postTypes` is empty is `post_type_not_supported`. Read the entry’s own `limits` before composing: a Story takes one attachment against ten, publishes no caption at all, holds a video for a minute rather than fifteen, and declares none of the options a post there has.
+       * @description Which KIND of thing to publish here, on platforms that publish more than one: an Instagram Story rather than a post on the grid. One of the `key`s in that platform’s `postTypes` on `GET /public/v1/platforms`; omit it for the default, which is what that platform’s top-level `limits` describes. A key it does not declare is `post_type_invalid`, and sending one at all where `postTypes` is empty is `post_type_not_supported`. Read the entry’s own `limits` before composing: a Story takes one attachment against ten, publishes no caption at all, holds a video for a minute rather than fifteen, and declares none of the options a post there has.
        * @example story
        */
       postType?: string;
       /**
-       * @description Values for the fields that belong to this channel's platform alone — Pinterest's `link` and `board_section_id`, TikTok's `privacy_level`, X's poll answers. Keyed by the `key` of each entry in that platform's `limits.options` on `GET /public/v1/platforms`, which is also where the caps and accepted values are. A key the platform doesn't declare is `option_not_supported`, not a field we quietly drop. Send a string, unless that entry's `type` is `list` — those take an array of strings, and sending the wrong one of the two shapes is `option_invalid`. The bounds here are the request's outer limits rather than any platform's: the real `minItems`, `maxItems` and per-entry `maxCharacters` are on the declaration.
+       * @description Values for the fields that belong to this channel's platform alone: Pinterest's `link` and `board_section_id`, TikTok's `privacy_level`, X's poll answers. Keyed by the `key` of each entry in that platform's `limits.options` on `GET /public/v1/platforms`, which is also where the caps and accepted values are. A key the platform doesn't declare is `option_not_supported`, not a field we quietly drop. Send a string, unless that entry's `type` is `list`: those take an array of strings, and sending the wrong one of the two shapes is `option_invalid`. The bounds here are the request's outer limits rather than any platform's: the real `minItems`, `maxItems` and per-entry `maxCharacters` are on the declaration.
        * @example {
        *       "link": "https://example.com/recipes/pesto"
        *     }
@@ -1163,9 +1168,9 @@ export interface components {
     CreatePostRequest: {
       /**
        * @description What to do with it.
-       *     `draft` — store it, publish nothing. It still occupies its slot.
-       *     `schedule` — store it and start a durable timer for `scheduledAt`.
-       *     `now` — store it and queue it for immediate publication.
+       *     `draft`: store it, publish nothing. It still occupies its slot.
+       *     `schedule`: store it and start a durable timer for `scheduledAt`.
+       *     `now`: store it and queue it for immediate publication.
        *
        *     `now` is ASYNCHRONOUS: the response comes back with the submission `publishing`, not published. Publishing takes as long as the platforms take, and a request that blocked on it would time out on exactly the submissions that matter most.
        * @enum {string}
@@ -1176,15 +1181,15 @@ export interface components {
        * @description Required when `intent` is `schedule`. For `draft` it is the slot the post occupies; for `now` it defaults to the moment it was queued.
        */
       scheduledAt?: string;
-      /** @description Where it goes. At least one, for every intent — including drafts. */
+      /** @description Where it goes. At least one, for every intent, including drafts. */
       channels: components['schemas']['CreatePostChannel'][];
-      /** @description The workspace’s own labels for this submission — ids from `GET /public/v1/tags`. Ids rather than names, because the name is the field a workspace edits. An id this workspace does not own is `tag_not_found`, not a value we drop. On `PUT` this is a replacement like the rest of the body, so omitting it removes every tag. */
+      /** @description The workspace’s own labels for this submission: ids from `GET /public/v1/tags`. Ids rather than names, because the name is the field a workspace edits. An id this workspace does not own is `tag_not_found`, not a value we drop. On `PUT` this is a replacement like the rest of the body, so omitting it removes every tag. */
       tagIds?: string[];
     };
     CreateWebhookRequest: {
       /**
        * Format: uri
-       * @description Absolute `https://` (or `http://` for a local receiver, where the deployment allows it). Addresses only reachable from inside our network are refused as `webhook_url_invalid` — nothing sent to one would reach you.
+       * @description Absolute `https://` (or `http://` for a local receiver, where the deployment allows it). Addresses only reachable from inside our network are refused as `webhook_url_invalid`: nothing sent to one would reach you.
        * @example https://example.com/hooks/bulkit
        */
       url: string;
@@ -1292,16 +1297,16 @@ export interface components {
         | 'service_unavailable'
         | 'internal_error';
       /**
-       * @description The explanation, in prose, and the best one available — safe to surface to your own users. Never branch on it.
-       * @example X (Twitter) allows 280 characters — this one is 300
+       * @description The explanation, in prose, and the best one available: safe to surface to your own users. Never branch on it.
+       * @example X (Twitter) allows 280 characters; this one is 300
        */
       message: string;
       /**
-       * @description Path into the request body that caused it, where one applies — or the name of the offending header, for the failures a header produces (`Idempotency-Key`). When `details` is present this is the first of them.
+       * @description Path into the request body that caused it, where one applies, or the name of the offending header, for the failures a header produces (`Idempotency-Key`). When `details` is present this is the first of them.
        * @example channels[1].blocks[0].content
        */
       field?: string;
-      /** @description Every field that failed, when schema validation rejected more than one. Absent otherwise — a platform rule refuses one thing at a time. Fix them together rather than a round trip per mistake. */
+      /** @description Every field that failed, when schema validation rejected more than one. Absent otherwise: a platform rule refuses one thing at a time. Fix them together rather than a round trip per mistake. */
       details?: components['schemas']['FieldError'][];
       /**
        * @description Echoed from the `x-request-id` response header and logged server-side. Quote it in a support request and the failure is one lookup away.
@@ -1317,7 +1322,7 @@ export interface components {
        */
       field: string;
       /**
-       * @description Why it was rejected. Prose — never branch on it.
+       * @description Why it was rejected. Prose: never branch on it.
        * @example channels[0].blocks[1].content must be a string
        */
       message: string;
@@ -1397,7 +1402,7 @@ export interface components {
        */
       score: number;
     };
-    /** @description An endpoint together with its signing secret. Returned by exactly two operations — registering an endpoint and rolling its secret — and by nothing else, ever. */
+    /** @description An endpoint together with its signing secret. Returned by exactly two operations (registering an endpoint and rolling its secret) and by nothing else, ever. */
     IssuedWebhookEndpoint: {
       /**
        * @description The signing secret, in the clear. **Store it now.** Only an encrypted copy is kept; the only way to get another is to roll it, which invalidates this one.
@@ -1409,7 +1414,7 @@ export interface components {
     /** @description An item in the workspace’s media library. */
     MediaItem: {
       /**
-       * @description Media library id. The stable identifier — key durable state off this.
+       * @description Media library id. The stable identifier: key durable state off this.
        * @example clx3k2p9q0001abcd1234efgh
        */
       id: string;
@@ -1438,6 +1443,14 @@ export interface components {
        * @example 2026-08-04T09:30:00.000Z
        */
       createdAt: string;
+    };
+    /** @description A page of the media library, newest first. */
+    MediaPage: {
+      /** @description The items on this page. */
+      data: components['schemas']['MediaItem'][];
+      /** @description Pass as `?cursor=` to fetch the next page. Null on the last page. Opaque by contract: do not parse it. */
+      nextCursor: string | null;
+      hasMore: boolean;
     };
     /** @description An open upload session. Cut the file into `partCount` parts of `partSize` bytes (the last one is whatever is left), ask for their URLs, PUT each part, then complete. */
     MediaUpload: {
@@ -1495,12 +1508,12 @@ export interface components {
         | 'bluesky'
         | 'reddit';
       /**
-       * @description Human name, e.g. "X". Display only — never branch on it.
+       * @description Human name, e.g. "X". Display only: never branch on it.
        * @example X (Twitter)
        */
       name: string;
       limits: components['schemas']['PlatformLimits'];
-      /** @description The KINDS of thing this platform publishes, where it publishes more than one — an Instagram Story against a post on the grid. EMPTY on every platform with a single kind, which is all of them but Instagram, so there is always an array to read. Send one entry’s `key` as `channels[].postType`; a key that is not listed is `post_type_invalid`, and sending one at all where this array is empty is `post_type_not_supported`. Omitting it asks for the FIRST entry, which is what `limits` above already describes — so a client that ignores this field reads exactly the platform it read before post types existed. */
+      /** @description The KINDS of thing this platform publishes, where it publishes more than one: an Instagram Story against a post on the grid. EMPTY on every platform with a single kind, which is all of them but Instagram, so there is always an array to read. Send one entry’s `key` as `channels[].postType`; a key that is not listed is `post_type_invalid`, and sending one at all where this array is empty is `post_type_not_supported`. Omitting it asks for the FIRST entry, which is what `limits` above already describes, so a client that ignores this field reads exactly the platform it read before post types existed. */
       postTypes: components['schemas']['PostType'][];
       /**
        * @description What this platform calls a block after the first: "post" on X, "comment" on LinkedIn. Travels so your own error messages can use the word your user would recognise.
@@ -1508,7 +1521,7 @@ export interface components {
        */
       continuationNoun: string;
     };
-    /** @description What this platform accepts. Read these rather than hardcoding them — they change when a platform changes, and a client carrying its own copy will be wrong before we are. */
+    /** @description What this platform accepts. Read these rather than hardcoding them: they change when a platform changes, and a client carrying its own copy will be wrong before we are. */
     PlatformLimits: {
       /**
        * @description Characters one block may carry.
@@ -1516,7 +1529,7 @@ export interface components {
        */
       maxCharacters: number;
       /**
-       * @description The most a block may carry on an account with the platform's paid tier, where one buys more room than `maxCharacters`. Null where every account gets the same number, which is every platform but X. Compose against `maxCharacters` unless you know the account has paid: nothing here says which tier a channel is on, so text between the two numbers is accepted by this API and settled by the platform at publish — it goes out for an account that pays and comes back as a publish error for one that doesn't. Over this number is `content_too_long`, for anyone.
+       * @description The most a block may carry on an account with the platform's paid tier, where one buys more room than `maxCharacters`. Null where every account gets the same number, which is every platform but X. Compose against `maxCharacters` unless you know the account has paid: nothing here says which tier a channel is on, so text between the two numbers is accepted by this API and settled by the platform at publish: it goes out for an account that pays and comes back as a publish error for one that doesn't. Over this number is `content_too_long`, for anyone.
        * @example 25000
        */
       maxCharactersPerAccount?: number | null;
@@ -1545,7 +1558,7 @@ export interface components {
       /** @description The platform refuses a post carrying no attachment at all. */
       requiresMedia: boolean;
       /**
-       * @description The mime types an attachment may be on this platform. The counts above can't express this, and on a video-only platform it decides whether the post can go out at all — check an upload's `mimeType` against every platform it's headed for.
+       * @description The mime types an attachment may be on this platform. The counts above can't express this, and on a video-only platform it decides whether the post can go out at all. Check an upload's `mimeType` against every platform it's headed for.
        * @example [
        *       "image/jpeg",
        *       "image/png",
@@ -1554,9 +1567,9 @@ export interface components {
        *     ]
        */
       acceptedMimeTypes: string[];
-      /** @description This platform publishes a per-attachment description and we send it. NOT a rule to validate against — `blocks[].mediaAltText` is accepted on every platform, because a description belongs to the file and one submission fans out to several channels. Read it to decide whether to ask for a description, and to explain why the one you wrote will not appear on a channel that returns false. */
+      /** @description This platform publishes a per-attachment description and we send it. NOT a rule to validate against: `blocks[].mediaAltText` is accepted on every platform, because a description belongs to the file and one submission fans out to several channels. Read it to decide whether to ask for a description, and to explain why the one you wrote will not appear on a channel that returns false. */
       supportsAltText: boolean;
-      /** @description What this platform does with people tagged on an attachment, or null when it tags nobody. UNLIKE `supportsAltText` above, this IS a rule to validate against: a description belongs to the file and an unused one costs the post nothing, while a handle is an account on THIS platform and the same characters name somebody else on the next one — so `blocks[].mediaUserTags` sent to a channel whose value here is null is refused as `user_tags_not_supported`. The whole object changes with `channels[].postType`; read it off the entry in `postTypes` you are publishing. */
+      /** @description What this platform does with people tagged on an attachment, or null when it tags nobody. UNLIKE `supportsAltText` above, this IS a rule to validate against: a description belongs to the file and an unused one costs the post nothing, while a handle is an account on THIS platform and the same characters name somebody else on the next one, so `blocks[].mediaUserTags` sent to a channel whose value here is null is refused as `user_tags_not_supported`. The whole object changes with `channels[].postType`; read it off the entry in `postTypes` you are publishing. */
       userTags?: {
         /**
          * @description Most people ONE attachment may tag. Per attachment, not per post: a carousel tags this many on every picture it carries.
@@ -1570,12 +1583,12 @@ export interface components {
          *     ]
          */
         kinds: ('image' | 'video' | 'document' | 'caption')[];
-        /** @description A tag names a POINT on the attachment as well as a person. Send `x` and `y` when true and neither when false — either one the wrong way round is `user_tag_position_invalid`. An Instagram feed photo is true; a Story is false, because it mentions someone without pointing at them. */
+        /** @description A tag names a POINT on the attachment as well as a person. Send `x` and `y` when true and neither when false: either one the wrong way round is `user_tag_position_invalid`. An Instagram feed photo is true; a Story is false, because it mentions someone without pointing at them. */
         positioned: boolean;
       } | null;
-      /** @description This platform publishes the block's text. `false` means it has no caption field at all — an Instagram Story, where the words are stored, published on every other channel of the same submission, and dropped here. Not a rule to check against: content is accepted on every platform, because one submission fans out to several and a caption written for four channels is not refused by the fifth. Where it is false there is nothing to count against `maxCharacters`. */
+      /** @description This platform publishes the block's text. `false` means it has no caption field at all: an Instagram Story, where the words are stored, published on every other channel of the same submission, and dropped here. Not a rule to check against: content is accepted on every platform, because one submission fans out to several and a caption written for four channels is not refused by the fifth. Where it is false there is nothing to count against `maxCharacters`. */
       publishesContent: boolean;
-      /** @description Set on platforms whose post has a TITLE field of its own, alongside its body — send it as `channels[].title` when creating a post. `null` on platforms that have no such field, which is most of them; sending a title to one of those is rejected with `title_not_supported` rather than ignored. Where it is set, `maxCharacters` is the title's own cap (unrelated to `maxCharacters` above, which measures the body) and going over is `title_too_long` — the title is never silently shortened. If `required` is true, publishing without one is `title_required`; drafts are exempt. */
+      /** @description Set on platforms whose post has a TITLE field of its own, alongside its body: send it as `channels[].title` when creating a post. `null` on platforms that have no such field, which is most of them; sending a title to one of those is rejected with `title_not_supported` rather than ignored. Where it is set, `maxCharacters` is the title's own cap (unrelated to `maxCharacters` above, which measures the body) and going over is `title_too_long`; the title is never silently shortened. If `required` is true, publishing without one is `title_required`; drafts are exempt. */
       title: {
         /**
          * @description Characters the title may carry. Counted in code points, so an emoji is one character.
@@ -1583,16 +1596,16 @@ export interface components {
          */
         maxCharacters: number;
         /**
-         * @description What the platform calls the field. Display only — never branch on it.
+         * @description What the platform calls the field. Display only: never branch on it.
          * @example Title
          */
         label: string;
         /** @description The platform will not publish a post without a title. Checked when publishing, not when drafting. */
         required: boolean;
-        /** @description A first block carrying a title needs nothing else — no `content`, no `mediaIds`. True on Reddit, where a link submission is a title and a URL and a self post with an empty body is an ordinary title-only post. False everywhere else, where a block with neither text nor an attachment is `content_empty` whatever its title says. Only the first block: a continuation has no title of its own. */
+        /** @description A first block carrying a title needs nothing else: no `content`, no `mediaIds`. True on Reddit, where a link submission is a title and a URL and a self post with an empty body is an ordinary title-only post. False everywhere else, where a block with neither text nor an attachment is `content_empty` whatever its title says. Only the first block: a continuation has no title of its own. */
         standsAlone: boolean;
       } | null;
-      /** @description Fields this platform has that others don't — Pinterest's destination link and alt text, TikTok's privacy level. Send values as `channels[].options`, keyed by each entry's `key`. Empty on a platform whose post is only its content, so there is always an array here to read. A key that isn't listed is rejected with `option_not_supported` rather than dropped. */
+      /** @description Fields this platform has that others don't: Pinterest's destination link and alt text, TikTok's privacy level. Send values as `channels[].options`, keyed by each entry's `key`. Empty on a platform whose post is only its content, so there is always an array here to read. A key that isn't listed is rejected with `option_not_supported` rather than dropped. */
       options: {
         /**
          * @description Send the value under this key in `channels[].options`.
@@ -1600,40 +1613,40 @@ export interface components {
          */
         key: string;
         /**
-         * @description What the platform calls the field. Display only — never branch on it.
+         * @description What the platform calls the field. Display only: never branch on it.
          * @example Destination link
          */
         label: string;
         /**
-         * @description `text` is free text capped by `maxCharacters`; `url` must be an absolute http(s) address or it is `option_invalid`; `choice` must be one of `choices` when that list is present; `boolean` takes the string `"true"` or `"false"`; `media` is the id of a file you uploaded, and the `media` object on this entry says what that file may be. Those five are all sent as strings whatever they mean. `list` is the one that is not: it is a REPEATED value — X’s poll answers — sent as a JSON array of strings, bounded by `minItems`/`maxItems`, with `maxCharacters` applying to each entry rather than to the whole. `search` is a string too, and it is an opaque platform id from a set too large to publish here — Instagram’s `location_id` is one Facebook Page out of every Page that has an address. Its `choices` is null and stays null, because there is no list. Send an id you already hold and nothing validates it on submission; the platform settles it when the post goes out, which for a place that has since closed is the post publishing without one. To turn a NAME into one of these ids, call `GET /channels/{id}/options/{key}/choices?q=...` and send the `value` it returns.
+         * @description `text` is free text capped by `maxCharacters`; `url` must be an absolute http(s) address or it is `option_invalid`; `choice` must be one of `choices` when that list is present; `boolean` takes the string `"true"` or `"false"`; `media` is the id of a file you uploaded, and the `media` object on this entry says what that file may be. Those five are all sent as strings whatever they mean. `list` is the one that is not: it is a REPEATED value (X’s poll answers) sent as a JSON array of strings, bounded by `minItems`/`maxItems`, with `maxCharacters` applying to each entry rather than to the whole. `search` is a string too, and it is an opaque platform id from a set too large to publish here: Instagram’s `location_id` is one Facebook Page out of every Page that has an address. Its `choices` is null and stays null, because there is no list. Send an id you already hold and nothing validates it on submission; the platform settles it when the post goes out, which for a place that has since closed is the post publishing without one. To turn a NAME into one of these ids, call `GET /channels/{id}/options/{key}/choices?q=...` and send the `value` it returns.
          * @enum {string}
          */
         type: 'text' | 'url' | 'choice' | 'boolean' | 'list' | 'media' | 'search';
-        /** @description The platform will not publish without this field. Checked when publishing, not when drafting — going without is `option_required`. */
+        /** @description The platform will not publish without this field. Checked when publishing, not when drafting: going without is `option_required`. */
         required: boolean;
         /** @description A sentence describing the field, where its label doesn't say enough on its own. */
         help: string | null;
-        /** @description Shown in place of `help` while a `boolean` is on — the sentence that only becomes true once it's set. Where a platform requires a declaration before publishing, this is it: TikTok's guidelines set out what a creator undertakes by marking a video a paid partnership, and a client that puts someone in front of that checkbox is expected to put them in front of this too. Null on every non-boolean and on every option with nothing extra to say. */
+        /** @description Shown in place of `help` while a `boolean` is on: the sentence that only becomes true once it's set. Where a platform requires a declaration before publishing, this is it: TikTok's guidelines set out what a creator undertakes by marking a video a paid partnership, and a client that puts someone in front of that checkbox is expected to put them in front of this too. Null on every non-boolean and on every option with nothing extra to say. */
         helpWhenOn: string | null;
         /**
-         * @description Cap for a `text` or `url`, counted in code points, and for ONE ENTRY of a `list`. Over it is `option_too_long` — the value is never silently shortened — and on a list the error’s `field` pointer carries the index of the entry that was too long. The per-entry reading is the only one that means anything on a repeated field: X allows 25 characters per poll answer and states no rule about the four of them together. Null on a `choice`.
+         * @description Cap for a `text` or `url`, counted in code points, and for ONE ENTRY of a `list`. Over it is `option_too_long` (the value is never silently shortened) and on a list the error’s `field` pointer carries the index of the entry that was too long. The per-entry reading is the only one that means anything on a repeated field: X allows 25 characters per poll answer and states no rule about the four of them together. Null on a `choice`.
          * @example 2048
          */
         maxCharacters: number | null;
         /**
-         * @description Fewest entries a `list` may carry, checked only when publishing — like `required`, because a draft carrying one poll answer so far is unfinished rather than wrong. Under it is `option_too_few`. An EMPTY list is not this: it is the same as sending nothing at all, so it answers to `required` and never to `minItems`. Null on every other type, and on a list the platform does not bound from below.
+         * @description Fewest entries a `list` may carry, checked only when publishing, like `required`, because a draft carrying one poll answer so far is unfinished rather than wrong. Under it is `option_too_few`. An EMPTY list is not this: it is the same as sending nothing at all, so it answers to `required` and never to `minItems`. Null on every other type, and on a list the platform does not bound from below.
          * @example 2
          */
         minItems: number | null;
         /**
-         * @description Most entries a `list` may carry, checked whenever the field is sent. Over it is `option_too_many` — separate from `option_too_long`, which on a list measures one entry, because too many answers and too long an answer are fixed in different places. Null on every other type.
+         * @description Most entries a `list` may carry, checked whenever the field is sent. Over it is `option_too_many`, separate from `option_too_long`, which on a list measures one entry, because too many answers and too long an answer are fixed in different places. Null on every other type.
          * @example 4
          */
         maxItems: number | null;
-        /** @description What a `media` option's file may be — a SECOND attachment, with rules of its own rather than the block's. Deliberately not `acceptedMimeTypes` and `limits.media`, which describe the post's attachments: a YouTube post's attachment is the video and its thumbnail is a still picture, and the same platform refuses each in the other's place. Send the media `id` as this option's value, exactly as `blocks[].mediaIds` takes ids. A file that isn't in your workspace, isn't one of `mimeTypes`, or is over `maxBytes` is `option_invalid` against this key. Null on every other type. */
+        /** @description What a `media` option's file may be: a SECOND attachment, with rules of its own rather than the block's. Deliberately not `acceptedMimeTypes` and `limits.media`, which describe the post's attachments: a YouTube post's attachment is the video and its thumbnail is a still picture, and the same platform refuses each in the other's place. Send the media `id` as this option's value, exactly as `blocks[].mediaIds` takes ids. A file that isn't in your workspace, isn't one of `mimeTypes`, or is over `maxBytes` is `option_invalid` against this key. Null on every other type. */
         media: {
           /**
-           * @description The file types this slot publishes. What our publish SENDS today rather than what the platform documents — the same promise `acceptedMimeTypes` makes.
+           * @description The file types this slot publishes. What our publish SENDS today rather than what the platform documents: the same promise `acceptedMimeTypes` makes.
            * @example [
            *       "image/jpeg",
            *       "image/png"
@@ -1646,7 +1659,7 @@ export interface components {
            */
           maxBytes: number | null;
         } | null;
-        /** @description The accepted values of a `choice` — or **null when they depend on the connected account rather than the platform**, which is TikTok's privacy levels: what a creator may post as varies by account and by the app's review status, so no list published here would be right for every channel. A null means the value isn't validated on submission; read what one channel allows from `GET /channels/{id}/capabilities`, or send what the account should use and the platform settles it at publish time, falling back to what that account does allow. Always null on a `text` or `url`, and always null on a `search` for a different reason worth telling apart: a dynamic `choice` has a list this endpoint can't publish because it belongs to an account, while a `search` has no list at all. */
+        /** @description The accepted values of a `choice`, or **null when they depend on the connected account rather than the platform**, which is TikTok's privacy levels: what a creator may post as varies by account and by the app's review status, so no list published here would be right for every channel. A null means the value isn't validated on submission; read what one channel allows from `GET /channels/{id}/capabilities`, or send what the account should use and the platform settles it at publish time, falling back to what that account does allow. Always null on a `text` or `url`, and always null on a `search` for a different reason worth telling apart: a dynamic `choice` has a list this endpoint can't publish because it belongs to an account, while a `search` has no list at all. */
         choices:
           | {
               /** @description Send this. */
@@ -1657,7 +1670,7 @@ export interface components {
               help: string | null;
             }[]
           | null;
-        /** @description What this field rules out elsewhere, read as: while you send a value for this key, the named option may not carry the listed values — or, where `values` is null, may not carry any value at all. “Sending a value” is the same reading `rulesOutMedia` uses: a `boolean` counts only as `"true"`, a `list` only with an entry in it. A rule of the platform's rather than of ours — TikTok will not publish a video marked as a paid partnership with a `privacy_level` of `SELF_ONLY`, and Threads will not attach a link preview to a post that is also a poll — and sending the pair anyway is `option_invalid` against the key named here, not against the field that caused it. This is the one case where a `choice` with a null `choices` list is validated on submission: what an account may pick is still not checked, but a combination the platform publishes as impossible needs nothing asked of the account. A MUTUAL exclusion appears on both fields, each carrying the sentence that reads correctly when that field is the one you added. Always an array; empty on the options that have no such rule, which is most of them. */
+        /** @description What this field rules out elsewhere, read as: while you send a value for this key, the named option may not carry the listed values; or, where `values` is null, may not carry any value at all. “Sending a value” is the same reading `rulesOutMedia` uses: a `boolean` counts only as `"true"`, a `list` only with an entry in it. A rule of the platform's rather than of ours (TikTok will not publish a video marked as a paid partnership with a `privacy_level` of `SELF_ONLY`, and Threads will not attach a link preview to a post that is also a poll) and sending the pair anyway is `option_invalid` against the key named here, not against the field that caused it. This is the one case where a `choice` with a null `choices` list is validated on submission: what an account may pick is still not checked, but a combination the platform publishes as impossible needs nothing asked of the account. A MUTUAL exclusion appears on both fields, each carrying the sentence that reads correctly when that field is the one you added. Always an array; empty on the options that have no such rule, which is most of them. */
         rulesOut: {
           /**
            * @description The other option's `key`.
@@ -1665,7 +1678,7 @@ export interface components {
            */
           key: string;
           /**
-           * @description Values of that option you may not send alongside this one, or null where the option may not be sent at all — the only reading available where the other field has no enumerable values (a `text`, a `url` or a `list`). Never an empty array: a rule that excludes nothing is not published.
+           * @description Values of that option you may not send alongside this one, or null where the option may not be sent at all: the only reading available where the other field has no enumerable values (a `text`, a `url` or a `list`). Never an empty array: a rule that excludes nothing is not published.
            * @example [
            *       "SELF_ONLY"
            *     ]
@@ -1674,22 +1687,22 @@ export interface components {
           /** @description Why, in the platform's terms. Safe to show a user verbatim. */
           reason: string;
         }[];
-        /** @description Set where sending a value for this field means the post may carry NO ATTACHMENTS, to the platform’s own sentence saying why — safe to show a user verbatim. `rulesOut`’s counterpart for the thing a post HAS rather than a field it carries: a tweet is a poll or it is pictures, never both. Sending the pair anyway is `option_invalid`, reported against the `mediaIds` of the block that would have to give something up rather than against this key. Applies while the field has any value at all — a `boolean` that is `"true"`, or a `list` with an entry in it; an empty list rules nothing out. Null where the field and the attachments are independent, which is nearly everywhere. */
+        /** @description Set where sending a value for this field means the post may carry NO ATTACHMENTS, to the platform’s own sentence saying why, safe to show a user verbatim. `rulesOut`’s counterpart for the thing a post HAS rather than a field it carries: a tweet is a poll or it is pictures, never both. Sending the pair anyway is `option_invalid`, reported against the `mediaIds` of the block that would have to give something up rather than against this key. Applies while the field has any value at all: a `boolean` that is `"true"`, or a `list` with an entry in it; an empty list rules nothing out. Null where the field and the attachments are independent, which is nearly everywhere. */
         rulesOutMedia: string | null;
-        /** @description What sending a value for this field makes REQUIRED elsewhere: while this one carries a value, every option named here has to carry one too. `rulesOut`’s obligation to its prohibition, and it exists because `required` cannot say it — LinkedIn’s poll needs a question as well as its answers, and declaring the question `required` would demand one of every ordinary status update. “Carrying a value” is the same reading the two rules above use: a `boolean` counts only as `"true"`, a `list` only with an entry in it. Sending one half without the other is `option_required` against the key named here — the same code as a plain missing field, because that is what it is, with the platform’s own sentence in place of ours. Checked only when publishing, like `required` and `minItems`: a draft carrying half a poll is unfinished rather than wrong. A MUTUAL obligation appears on both fields, each carrying the sentence that reads correctly when that field is the half you left out. Always an array; empty on the options that impose nothing, which is nearly all of them. */
+        /** @description What sending a value for this field makes REQUIRED elsewhere: while this one carries a value, every option named here has to carry one too. `rulesOut`’s obligation to its prohibition, and it exists because `required` cannot say it: LinkedIn’s poll needs a question as well as its answers, and declaring the question `required` would demand one of every ordinary status update. “Carrying a value” is the same reading the two rules above use: a `boolean` counts only as `"true"`, a `list` only with an entry in it. Sending one half without the other is `option_required` against the key named here: the same code as a plain missing field, because that is what it is, with the platform’s own sentence in place of ours. Checked only when publishing, like `required` and `minItems`: a draft carrying half a poll is unfinished rather than wrong. A MUTUAL obligation appears on both fields, each carrying the sentence that reads correctly when that field is the half you left out. Always an array; empty on the options that impose nothing, which is nearly all of them. */
         requires: {
           /**
-           * @description The other option's `key` — the one you also have to send a value for.
+           * @description The other option's `key`: the one you also have to send a value for.
            * @example poll_question
            */
           key: string;
           /** @description Why, in the platform's terms. Safe to show a user verbatim, and it names both repairs: send the missing half, or clear the one you sent. */
           reason: string;
         }[];
-        /** @description Set where an ATTACHMENT of one kind makes this field necessary, to that kind and the platform’s own sentence saying why. `requires` read from the other side — there another FIELD makes this one necessary, here it is a file: Pinterest refuses a Pin made from a video that has no cover image, and `required` could not say so, since most Pins are pictures and a picture has no cover. Checked only when publishing, like `required` and `requires`, and refused as `option_required` against this key rather than against the attachment that caused it. Null where nothing a post carries has any bearing on the field, which is nearly everywhere. */
+        /** @description Set where an ATTACHMENT of one kind makes this field necessary, to that kind and the platform’s own sentence saying why. `requires` read from the other side. There another FIELD makes this one necessary, here it is a file: Pinterest refuses a Pin made from a video that has no cover image, and `required` could not say so, since most Pins are pictures and a picture has no cover. Checked only when publishing, like `required` and `requires`, and refused as `option_required` against this key rather than against the attachment that caused it. Null where nothing a post carries has any bearing on the field, which is nearly everywhere. */
         requiredWithMedia: {
           /**
-           * @description The kind of attachment that makes this field necessary — the same vocabulary `media.perKind` is keyed by. An attachment of any other kind leaves the field optional. `caption` is in the vocabulary and cannot appear here: a subtitle file is never a post’s attachment.
+           * @description The kind of attachment that makes this field necessary: the same vocabulary `media.perKind` is keyed by. An attachment of any other kind leaves the field optional. `caption` is in the vocabulary and cannot appear here: a subtitle file is never a post’s attachment.
            * @example video
            * @enum {string}
            */
@@ -1698,11 +1711,11 @@ export interface components {
           reason: string;
         } | null;
         /**
-         * @description The `boolean` option that has to be on before this field may carry a value at all. A FOLLOW-UP QUESTION rather than a rule between two answers, which is what separates it from `rulesOut` and `requires`: those describe what a filled-in field does to another field that is always there, while this says the field is not there yet. TikTok’s commercial-content disclosure is the case — the two boxes naming what a post promotes only mean anything once the creator has said it promotes something. Sending a value for this key while the named option is off or absent is `option_invalid` against THIS key, and it is refused whether or not you are publishing: it is not an unfinished answer, it is an answer to a question nobody asked. On TikTok it is also a commercial label, and a label nobody confirmed must not reach a published video. Null where the field always applies, which is nearly everywhere.
+         * @description The `boolean` option that has to be on before this field may carry a value at all. A FOLLOW-UP QUESTION rather than a rule between two answers, which is what separates it from `rulesOut` and `requires`: those describe what a filled-in field does to another field that is always there, while this says the field is not there yet. TikTok’s commercial-content disclosure is the case: the two boxes naming what a post promotes only mean anything once the creator has said it promotes something. Sending a value for this key while the named option is off or absent is `option_invalid` against THIS key, and it is refused whether or not you are publishing: it is not an unfinished answer, it is an answer to a question nobody asked. On TikTok it is also a commercial label, and a label nobody confirmed must not reach a published video. Null where the field always applies, which is nearly everywhere.
          * @example disclose_content
          */
         revealedBy: string | null;
-        /** @description `requires` with the quantifier changed: while this field carries a value, ANY ONE of the named options has to carry one too. That rule names a field and demands it, and two entries mean both; this names a set and demands one of them without preferring either. TikTok’s disclosure parent is the case — the creator has to say which kind of promotion it is, and either answer is a complete one. Checked only when publishing, like `required` and `requires`, and refused as `option_required` against the first key in the set. Null where the field demands nothing, which is nearly everywhere. */
+        /** @description `requires` with the quantifier changed: while this field carries a value, ANY ONE of the named options has to carry one too. That rule names a field and demands it, and two entries mean both; this names a set and demands one of them without preferring either. TikTok’s disclosure parent is the case: the creator has to say which kind of promotion it is, and either answer is a complete one. Checked only when publishing, like `required` and `requires`, and refused as `option_required` against the first key in the set. Null where the field demands nothing, which is nearly everywhere. */
         requiresAnyOf: {
           /**
            * @description The option keys, one of which must carry a value. “Carrying a value” is the same reading every other rule here uses: a `boolean` counts only as `"true"`, a `list` only with an entry in it.
@@ -1716,7 +1729,7 @@ export interface components {
           reason: string;
         } | null;
       }[];
-      /** @description What an attachment must BE here beyond its file type — how long a video runs and what shape it is. `null` on a platform that publishes no such rule, which is most of them. Every field is transcribed from the platform's own spec and nothing is inferred, so a null field means the platform states no rule rather than that anything goes. Worth reading before you upload rather than before you post: these are the limits you can only satisfy with a different file. Checked only against values we measured — duration and dimensions are read from the container at upload, are always unknown for images, and an unknown value never refuses a post. */
+      /** @description What an attachment must BE here beyond its file type: how long a video runs and what shape it is. `null` on a platform that publishes no such rule, which is most of them. Every field is transcribed from the platform's own spec and nothing is inferred, so a null field means the platform states no rule rather than that anything goes. Worth reading before you upload rather than before you post: these are the limits you can only satisfy with a different file. Checked only against values we measured: duration and dimensions are read from the container at upload, are always unknown for images, and an unknown value never refuses a post. */
       media: {
         /**
          * @description Longest a video may run. Over it is `attachment_too_long`.
@@ -1734,18 +1747,18 @@ export interface components {
          */
         minAspectRatio: number | null;
         /**
-         * @description Highest accepted width ÷ height, measured as the video plays — rotation is already applied, so a portrait phone clip counts as portrait.
+         * @description Highest accepted width ÷ height, measured as the video plays: rotation is already applied, so a portrait phone clip counts as portrait.
          * @example 10
          */
         maxAspectRatio: number | null;
         /**
-         * @description Most pixels one attachment may contain — width × height. Over it is `attachment_too_many_pixels`. Not a byte ceiling in disguise, and the reason it is worth checking before you upload: a 40 megapixel camera JPEG is only a few megabytes, so it satisfies every `maxBytes` here and is still refused. Nothing on this side resizes anything, so a picture over the cap needs saving smaller first.
+         * @description Most pixels one attachment may contain (width × height). Over it is `attachment_too_many_pixels`. Not a byte ceiling in disguise, and the reason it is worth checking before you upload: a 40 megapixel camera JPEG is only a few megabytes, so it satisfies every `maxBytes` here and is still refused. Nothing on this side resizes anything, so a picture over the cap needs saving smaller first.
          * @example 36152320
          */
         maxPixels: number | null;
-        /** @description True when the duration cap belongs to the connected ACCOUNT rather than the platform, so no number published here could be right for every channel — TikTok grants different creators different maximums. No endpoint will tell you the number: it's resolved when the post publishes, and an over-long video fails then with that account's real limit named in the error. */
+        /** @description True when the duration cap belongs to the connected ACCOUNT rather than the platform, so no number published here could be right for every channel: TikTok grants different creators different maximums. No endpoint will tell you the number: it's resolved when the post publishes, and an over-long video fails then with that account's real limit named in the error. */
         durationIsPerAccount: boolean;
-        /** @description Rules that differ by what the file IS, where one number could not be right for both kinds — Bluesky takes a 1 MB image and a 50 MB video, and a LinkedIn post carries one document OR up to twenty images. `null` on a platform that publishes no per-kind rule. All four kinds are always present when it isn't; a `null` entry means this platform states nothing about that kind, not that it refuses it — `acceptedMimeTypes` is what says which types publish at all. Nothing here widens `maxMedia`; it only narrows it further. */
+        /** @description Rules that differ by what the file IS, where one number could not be right for both kinds: Bluesky takes a 1 MB image and a 50 MB video, and a LinkedIn post carries one document OR up to twenty images. `null` on a platform that publishes no per-kind rule. All four kinds are always present when it isn't; a `null` entry means this platform states nothing about that kind, not that it refuses it; `acceptedMimeTypes` is what says which types publish at all. Nothing here widens `maxMedia`; it only narrows it further. */
         perKind: {
           /** @description What this platform allows for images specifically. Null when it publishes no rule about them. */
           image: {
@@ -1755,14 +1768,14 @@ export interface components {
              */
             maxCount: number | null;
             /**
-             * @description Largest ONE image may be, in bytes. Over it is `attachment_too_large`. The only media rule checked on every attachment — a stored file always has a size, where the duration and dimensions above are measured best-effort and are unknown for every image.
+             * @description Largest ONE image may be, in bytes. Over it is `attachment_too_large`. The only media rule checked on every attachment: a stored file always has a size, where the duration and dimensions above are measured best-effort and are unknown for every image.
              * @example 50000000
              */
             maxBytes: number | null;
             /** @description True when a image may not share a post with a file of any other kind. Mixing them is `attachment_kinds_mixed`. */
             alone: boolean;
             /**
-             * @description Lowest width ÷ height accepted for a image, where that differs from the platform-wide `minAspectRatio` above — it REPLACES that value for this kind rather than narrowing it. Null means the platform-wide one applies. Outside it is `attachment_aspect_unsupported`. Instagram is why: a feed image publishes between 4:5 and 1.91:1 where a video publishes between 0.01:1 and 10:1.
+             * @description Lowest width ÷ height accepted for a image, where that differs from the platform-wide `minAspectRatio` above. It REPLACES that value for this kind rather than narrowing it. Null means the platform-wide one applies. Outside it is `attachment_aspect_unsupported`. Instagram is why: a feed image publishes between 4:5 and 1.91:1 where a video publishes between 0.01:1 and 10:1.
              * @example 0.8
              */
             minAspectRatio: number | null;
@@ -1772,7 +1785,7 @@ export interface components {
              */
             maxAspectRatio: number | null;
             /**
-             * @description Most pixels ONE image may contain — width × height — where that differs from the platform-wide `maxPixels` above, which it REPLACES for this kind rather than narrowing. Null means the platform-wide one applies. Over it is `attachment_too_many_pixels`. LinkedIn is why it sits per kind: its image API refuses anything over 36,152,320 px and its video API publishes no pixel rule at all.
+             * @description Most pixels ONE image may contain (width × height) where that differs from the platform-wide `maxPixels` above, which it REPLACES for this kind rather than narrowing. Null means the platform-wide one applies. Over it is `attachment_too_many_pixels`. LinkedIn is why it sits per kind: its image API refuses anything over 36,152,320 px and its video API publishes no pixel rule at all.
              * @example 36152320
              */
             maxPixels: number | null;
@@ -1785,14 +1798,14 @@ export interface components {
              */
             maxCount: number | null;
             /**
-             * @description Largest ONE video may be, in bytes. Over it is `attachment_too_large`. The only media rule checked on every attachment — a stored file always has a size, where the duration and dimensions above are measured best-effort and are unknown for every image.
+             * @description Largest ONE video may be, in bytes. Over it is `attachment_too_large`. The only media rule checked on every attachment: a stored file always has a size, where the duration and dimensions above are measured best-effort and are unknown for every image.
              * @example 50000000
              */
             maxBytes: number | null;
             /** @description True when a video may not share a post with a file of any other kind. Mixing them is `attachment_kinds_mixed`. */
             alone: boolean;
             /**
-             * @description Lowest width ÷ height accepted for a video, where that differs from the platform-wide `minAspectRatio` above — it REPLACES that value for this kind rather than narrowing it. Null means the platform-wide one applies. Outside it is `attachment_aspect_unsupported`. Instagram is why: a feed image publishes between 4:5 and 1.91:1 where a video publishes between 0.01:1 and 10:1.
+             * @description Lowest width ÷ height accepted for a video, where that differs from the platform-wide `minAspectRatio` above. It REPLACES that value for this kind rather than narrowing it. Null means the platform-wide one applies. Outside it is `attachment_aspect_unsupported`. Instagram is why: a feed image publishes between 4:5 and 1.91:1 where a video publishes between 0.01:1 and 10:1.
              * @example 0.8
              */
             minAspectRatio: number | null;
@@ -1802,7 +1815,7 @@ export interface components {
              */
             maxAspectRatio: number | null;
             /**
-             * @description Most pixels ONE video may contain — width × height — where that differs from the platform-wide `maxPixels` above, which it REPLACES for this kind rather than narrowing. Null means the platform-wide one applies. Over it is `attachment_too_many_pixels`. LinkedIn is why it sits per kind: its image API refuses anything over 36,152,320 px and its video API publishes no pixel rule at all.
+             * @description Most pixels ONE video may contain (width × height) where that differs from the platform-wide `maxPixels` above, which it REPLACES for this kind rather than narrowing. Null means the platform-wide one applies. Over it is `attachment_too_many_pixels`. LinkedIn is why it sits per kind: its image API refuses anything over 36,152,320 px and its video API publishes no pixel rule at all.
              * @example 36152320
              */
             maxPixels: number | null;
@@ -1815,14 +1828,14 @@ export interface components {
              */
             maxCount: number | null;
             /**
-             * @description Largest ONE document may be, in bytes. Over it is `attachment_too_large`. The only media rule checked on every attachment — a stored file always has a size, where the duration and dimensions above are measured best-effort and are unknown for every image.
+             * @description Largest ONE document may be, in bytes. Over it is `attachment_too_large`. The only media rule checked on every attachment: a stored file always has a size, where the duration and dimensions above are measured best-effort and are unknown for every image.
              * @example 50000000
              */
             maxBytes: number | null;
             /** @description True when a document may not share a post with a file of any other kind. Mixing them is `attachment_kinds_mixed`. */
             alone: boolean;
             /**
-             * @description Lowest width ÷ height accepted for a document, where that differs from the platform-wide `minAspectRatio` above — it REPLACES that value for this kind rather than narrowing it. Null means the platform-wide one applies. Outside it is `attachment_aspect_unsupported`. Instagram is why: a feed image publishes between 4:5 and 1.91:1 where a video publishes between 0.01:1 and 10:1.
+             * @description Lowest width ÷ height accepted for a document, where that differs from the platform-wide `minAspectRatio` above. It REPLACES that value for this kind rather than narrowing it. Null means the platform-wide one applies. Outside it is `attachment_aspect_unsupported`. Instagram is why: a feed image publishes between 4:5 and 1.91:1 where a video publishes between 0.01:1 and 10:1.
              * @example 0.8
              */
             minAspectRatio: number | null;
@@ -1832,12 +1845,12 @@ export interface components {
              */
             maxAspectRatio: number | null;
             /**
-             * @description Most pixels ONE document may contain — width × height — where that differs from the platform-wide `maxPixels` above, which it REPLACES for this kind rather than narrowing. Null means the platform-wide one applies. Over it is `attachment_too_many_pixels`. LinkedIn is why it sits per kind: its image API refuses anything over 36,152,320 px and its video API publishes no pixel rule at all.
+             * @description Most pixels ONE document may contain (width × height) where that differs from the platform-wide `maxPixels` above, which it REPLACES for this kind rather than narrowing. Null means the platform-wide one applies. Over it is `attachment_too_many_pixels`. LinkedIn is why it sits per kind: its image API refuses anything over 36,152,320 px and its video API publishes no pixel rule at all.
              * @example 36152320
              */
             maxPixels: number | null;
           } | null;
-          /** @description Always null. A subtitle file is a kind the media library stores and never a kind a POST carries, so no platform has a rule about how many of them one may hold. Where a subtitle file reaches a platform is a `media` option — see YouTube’s `captionFile` — whose own `mimeTypes` and `maxBytes` are the rules that bind it. */
+          /** @description Always null. A subtitle file is a kind the media library stores and never a kind a POST carries, so no platform has a rule about how many of them one may hold. Where a subtitle file reaches a platform is a `media` option (see YouTube’s `captionFile`) whose own `mimeTypes` and `maxBytes` are the rules that bind it. */
           caption: {
             /**
              * @description Most subtitle files one post may carry, where that is tighter than `maxMedia`. Null means only `maxMedia` binds. Over it is `too_many_attachments_of_kind`.
@@ -1845,14 +1858,14 @@ export interface components {
              */
             maxCount: number | null;
             /**
-             * @description Largest ONE subtitle file may be, in bytes. Over it is `attachment_too_large`. The only media rule checked on every attachment — a stored file always has a size, where the duration and dimensions above are measured best-effort and are unknown for every image.
+             * @description Largest ONE subtitle file may be, in bytes. Over it is `attachment_too_large`. The only media rule checked on every attachment: a stored file always has a size, where the duration and dimensions above are measured best-effort and are unknown for every image.
              * @example 50000000
              */
             maxBytes: number | null;
             /** @description True when a subtitle file may not share a post with a file of any other kind. Mixing them is `attachment_kinds_mixed`. */
             alone: boolean;
             /**
-             * @description Lowest width ÷ height accepted for a subtitle file, where that differs from the platform-wide `minAspectRatio` above — it REPLACES that value for this kind rather than narrowing it. Null means the platform-wide one applies. Outside it is `attachment_aspect_unsupported`. Instagram is why: a feed image publishes between 4:5 and 1.91:1 where a video publishes between 0.01:1 and 10:1.
+             * @description Lowest width ÷ height accepted for a subtitle file, where that differs from the platform-wide `minAspectRatio` above. It REPLACES that value for this kind rather than narrowing it. Null means the platform-wide one applies. Outside it is `attachment_aspect_unsupported`. Instagram is why: a feed image publishes between 4:5 and 1.91:1 where a video publishes between 0.01:1 and 10:1.
              * @example 0.8
              */
             minAspectRatio: number | null;
@@ -1862,14 +1875,14 @@ export interface components {
              */
             maxAspectRatio: number | null;
             /**
-             * @description Most pixels ONE subtitle file may contain — width × height — where that differs from the platform-wide `maxPixels` above, which it REPLACES for this kind rather than narrowing. Null means the platform-wide one applies. Over it is `attachment_too_many_pixels`. LinkedIn is why it sits per kind: its image API refuses anything over 36,152,320 px and its video API publishes no pixel rule at all.
+             * @description Most pixels ONE subtitle file may contain (width × height) where that differs from the platform-wide `maxPixels` above, which it REPLACES for this kind rather than narrowing. Null means the platform-wide one applies. Over it is `attachment_too_many_pixels`. LinkedIn is why it sits per kind: its image API refuses anything over 36,152,320 px and its video API publishes no pixel rule at all.
              * @example 36152320
              */
             maxPixels: number | null;
           } | null;
         } | null;
         /**
-         * @description Rules for one exact MIME type, where the kind above is too coarse — `null` on a platform that publishes none, which is most of them. Keyed by the mime type as `media.mimeType` reports it. X is why it exists, and it needs every field: X takes "up to 4 photos, 1 animated GIF, or 1 video", where a GIF and a JPEG are both `image` — so the ceiling (15 MB of animation against 5 MB of still), the count and the exclusion are all facts about a type. `maxBytes` REPLACES the kind's ceiling for this file; `maxCount` is counted alongside the kind's cap rather than replacing it, since five images with one GIF among them are five of the kind and one of the type.
+         * @description Rules for one exact MIME type, where the kind above is too coarse (`null` on a platform that publishes none, which is most of them). Keyed by the mime type as `media.mimeType` reports it. X is why it exists, and it needs every field: X takes "up to 4 photos, 1 animated GIF, or 1 video", where a GIF and a JPEG are both `image`, so the ceiling (15 MB of animation against 5 MB of still), the count and the exclusion are all facts about a type. `maxBytes` REPLACES the kind's ceiling for this file; `maxCount` is counted alongside the kind's cap rather than replacing it, since five images with one GIF among them are five of the kind and one of the type.
          * @example {
          *       "image/jpeg": {
          *         "maxBytes": 5242880,
@@ -1897,27 +1910,27 @@ export interface components {
              * @example 1
              */
             maxCount: number | null;
-            /** @description True when a file of this type may not share a post with a file of any other type — its own kind included, which is what separates it from the per-kind flag. Mixing them is `attachment_types_mixed`. */
+            /** @description True when a file of this type may not share a post with a file of any other type, its own kind included, which is what separates it from the per-kind flag. Mixing them is `attachment_types_mixed`. */
             alone: boolean;
             /**
-             * @description What this platform calls a file of this type in a refusal — "GIF". Null where the kind name is the right word.
+             * @description What this platform calls a file of this type in a refusal: "GIF". Null where the kind name is the right word.
              * @example GIF
              */
             noun: string | null;
           };
         } | null;
       } | null;
-      /** @description What this platform will change about a post that is ALREADY OUT — send it with `POST /public/v1/posts/{id}/revise`. `null` where a published post is final, which includes every platform that offers no update endpoint at all. Only half the answer: whether a GIVEN channel may use it depends on what its connection was granted, which is `manageStatus` on `GET /public/v1/channels`. */
+      /** @description What this platform will change about a post that is ALREADY OUT. Send it with `POST /public/v1/posts/{id}/revise`. `null` where a published post is final, which includes every platform that offers no update endpoint at all. Only half the answer: whether a GIVEN channel may use it depends on what its connection was granted, which is `manageStatus` on `GET /public/v1/channels`. */
       remoteEdit: {
-        /** @description The parts that change. Attachments are on no platform's list and there is deliberately no member for them: revising cannot change what a post is carrying anywhere. Sending a part that is not listed is `edit_not_supported` — Reddit rewrites a post's body and never its title. */
+        /** @description The parts that change. Attachments are on no platform's list and there is deliberately no member for them: revising cannot change what a post is carrying anywhere. Sending a part that is not listed is `edit_not_supported`: Reddit rewrites a post's body and never its title. */
         fields: ('content' | 'title' | 'options')[];
-        /** @description Milliseconds after publishing during which an edit is still accepted, or `null` for no deadline — which is every platform today. A revision arriving after it is `edit_window_expired`. */
+        /** @description Milliseconds after publishing during which an edit is still accepted, or `null` for no deadline, which is every platform today. A revision arriving after it is `edit_window_expired`. */
         windowMs: number | null;
       } | null;
-      /** @description This platform can take a published post back down, so `POST /public/v1/posts/{id}/retract` reaches it. False means a copy published here is permanent as far as this API is concerned — retracting a submission that includes one deletes our record and reports that channel as one whose copy stays up. */
+      /** @description This platform can take a published post back down, so `POST /public/v1/posts/{id}/retract` reaches it. False means a copy published here is permanent as far as this API is concerned: retracting a submission that includes one deletes our record and reports that channel as one whose copy stays up. */
       supportsRemoteDelete: boolean;
     };
-    /** @description One submission — a single thing sent to one or more channels. `id` is the submission, not a per-channel row: each channel publishes independently and carries its own status inside `channels`. */
+    /** @description One submission: a single thing sent to one or more channels. `id` is the submission, not a per-channel row: each channel publishes independently and carries its own status inside `channels`. */
     Post: {
       /**
        * @description The submission id. Pass this to every `/posts/{id}` route.
@@ -1943,7 +1956,7 @@ export interface components {
       publishedAt: string | null;
       /** @description One entry per target account, in the order they were added. */
       channels: components['schemas']['PostChannel'][];
-      /** @description The workspace’s own labels for this submission — see `GET /public/v1/tags`. Empty when nothing is tagged. On the submission rather than on a channel, because that is what was tagged: one thing, filed under a word. Never published and never sent to a platform. */
+      /** @description The workspace’s own labels for this submission (see `GET /public/v1/tags`). Empty when nothing is tagged. On the submission rather than on a channel, because that is what was tagged: one thing, filed under a word. Never published and never sent to a platform. */
       tags: components['schemas']['Tag'][];
       /**
        * Format: date-time
@@ -1958,7 +1971,7 @@ export interface components {
        */
       updatedAt: string;
     };
-    /** @description One block of a chain — a tweet in a thread, a LinkedIn post or one of its comments. */
+    /** @description One block of a chain: a tweet in a thread, a LinkedIn post or one of its comments. */
     PostBlock: {
       /** @description The text of this block. */
       content: string;
@@ -1967,7 +1980,7 @@ export interface components {
       /**
        * @description Who this block tags on each attachment, keyed by the media id they are tagged on, holding only the attachments that tag somebody. A map beside `media` rather than a field on each attachment, which is where this differs from `altText`: a description belongs to the file and is resolved onto it, while a tag belongs to this post on this platform. It comes back the way it was sent, so a post read here can be resubmitted verbatim.
        * @example {
-       *       "med_2f8a": [
+       *       "clx3k2p9q0003abcd1234efgh": [
        *         {
        *           "username": "ada",
        *           "x": 0.25,
@@ -1984,7 +1997,7 @@ export interface components {
            */
           username: string;
           /**
-           * @description Distance from the LEFT edge as a fraction of the width — 0.5 is the middle, whatever the picture was uploaded at. Not pixels: a fraction is what survives the platform re-encoding the file.
+           * @description Distance from the LEFT edge as a fraction of the width: 0.5 is the middle, whatever the picture was uploaded at. Not pixels: a fraction is what survives the platform re-encoding the file.
            * @example 0.25
            */
           x?: number;
@@ -2004,7 +2017,7 @@ export interface components {
     /** @description One channel’s copy of a submission: its own status and result. */
     PostChannel: {
       /**
-       * @description The connected account this went to. Null when that account has since been disconnected — the publication and its result survive, the link to a live channel does not.
+       * @description The connected account this went to. Null when that account has since been disconnected: the publication and its result survive, the link to a live channel does not.
        * @example clx3k2p9q0001abcd1234efgh
        */
       channelId: string | null;
@@ -2032,12 +2045,12 @@ export interface components {
        */
       title?: string | null;
       /**
-       * @description Which kind of thing this channel published — one of the `key`s in that platform’s `postTypes` on `GET /public/v1/platforms`. Null on a platform that publishes a single kind, and null where the submission asked for the default; both read the same way, as the `limits` at the top of that platform.
+       * @description Which kind of thing this channel published: one of the `key`s in that platform’s `postTypes` on `GET /public/v1/platforms`. Null on a platform that publishes a single kind, and null where the submission asked for the default; both read the same way, as the `limits` at the top of that platform.
        * @example story
        */
       postType?: string | null;
       /**
-       * @description What this channel was given for its platform’s own fields — the values sent as `channels[].options`. Always an object, empty where nothing was sent. A value is a string, or an array of them for a field whose `type` on `GET /public/v1/platforms` is `list`; which one a key holds follows that declaration and never varies for a given key.
+       * @description What this channel was given for its platform’s own fields: the values sent as `channels[].options`. Always an object, empty where nothing was sent. A value is a string, or an array of them for a field whose `type` on `GET /public/v1/platforms` is `list`; which one a key holds follows that declaration and never varies for a given key.
        * @example {
        *       "link": "https://example.com/recipes/pesto"
        *     }
@@ -2077,7 +2090,7 @@ export interface components {
       /**
        * @description The platform’s RUNNING counts at that instant, keyed by metric name.
        *
-       *     AN ABSENT KEY IS NOT A ZERO — it was not reported at this capture, which on most platforms means it is never reported.
+       *     AN ABSENT KEY IS NOT A ZERO: it was not reported at this capture, which on most platforms means it is never reported.
        *
        *     Cumulative since the post went out, so a curve only climbs. A value that DROPS between two readings is real and means people undid something.
        * @example {
@@ -2091,7 +2104,7 @@ export interface components {
       };
     };
     /**
-     * @description One submission’s engagement CURVES, per channel — the series behind `GET /public/v1/stats`, which only ever sums the latest reading of each publication.
+     * @description One submission’s engagement CURVES, per channel: the series behind `GET /public/v1/stats`, which only ever sums the latest reading of each publication.
      *
      *     Cumulative and unevenly spaced: sampling decays from roughly hourly to weekly and stops at about thirty days, so plot against `capturedAt` and read an older post as frozen at its last reading rather than as having stopped earning.
      */
@@ -2102,7 +2115,7 @@ export interface components {
        */
       postId: string;
       /**
-       * @description Every metric name appearing anywhere in this response — the union of the per-channel lists, so one legend covers the whole submission. Empty when nothing has been reported for any channel. New names may be ADDED over time; treat an unrecognised one as a number you can display, not as an error.
+       * @description Every metric name appearing anywhere in this response: the union of the per-channel lists, so one legend covers the whole submission. Empty when nothing has been reported for any channel. New names may be ADDED over time; treat an unrecognised one as a number you can display, not as an error.
        * @example [
        *       "impressions",
        *       "likes",
@@ -2113,10 +2126,10 @@ export interface components {
       /** @description One entry per channel of the submission, in the same order as `channels` on `GET /public/v1/posts/{id}`. */
       channels: components['schemas']['PostMetricsChannel'][];
     };
-    /** @description One channel’s curve within the submission. Always present, even with no readings at all — omitting it would be indistinguishable from a channel the submission never went to, and "no readings" is the common case. */
+    /** @description One channel’s curve within the submission. Always present, even with no readings at all: omitting it would be indistinguishable from a channel the submission never went to, and "no readings" is the common case. */
     PostMetricsChannel: {
       /**
-       * @description The connected account, an id from `GET /public/v1/channels` — and what to join on for that channel’s `metricsStatus`, which is where the reason for an empty curve lives. Null once the account has been disconnected: the readings survive, the link doesn’t.
+       * @description The connected account, an id from `GET /public/v1/channels`, and what to join on for that channel’s `metricsStatus`, which is where the reason for an empty curve lives. Null once the account has been disconnected: the readings survive, the link doesn’t.
        * @example clx3k2p9q0001abcd1234efgh
        */
       channelId: string | null;
@@ -2146,18 +2159,18 @@ export interface components {
        *     ]
        */
       metrics: string[];
-      /** @description Oldest first. Empty when nothing has been sampled for this channel — the normal case, not an error. */
+      /** @description Oldest first. Empty when nothing has been sampled for this channel: the normal case, not an error. */
       readings: components['schemas']['PostMetricReading'][];
     };
     /** @description A page of submissions, newest first. */
     PostPage: {
       /** @description The submissions on this page. */
       data: components['schemas']['Post'][];
-      /** @description Pass as `?cursor=` to fetch the next page. Null on the last page — that, not an empty `data`, is how a client knows to stop. Opaque by contract: do not parse it. */
+      /** @description Pass as `?cursor=` to fetch the next page. Null on the last page. That, not an empty `data`, is how a client knows to stop. Opaque by contract: do not parse it. */
       nextCursor: string | null;
       hasMore: boolean;
     };
-    /** @description One kind of thing a platform publishes, with the limits that apply when you ask for it. The limits are complete rather than a diff — a kind of post is a different publication, not a variation on one. */
+    /** @description One kind of thing a platform publishes, with the limits that apply when you ask for it. The limits are complete rather than a diff: a kind of post is a different publication, not a variation on one. */
     PostType: {
       /**
        * @description Send this as `channels[].postType`. Stable; never displayed.
@@ -2169,7 +2182,7 @@ export interface components {
        * @example Story
        */
       label: string;
-      /** @description One sentence about what choosing it means where the limits don't say it — that an Instagram Story disappears after 24 hours, for instance. Null where there is nothing to add. */
+      /** @description One sentence about what choosing it means where the limits don't say it: that an Instagram Story disappears after 24 hours, for instance. Null where there is nothing to add. */
       help: string | null;
       limits: components['schemas']['PlatformLimits'];
     };
@@ -2186,7 +2199,7 @@ export interface components {
     RetractResult: {
       /** @description Channels whose copy is gone from the platform, and whose record went with it. */
       removed: {
-        /** @description The channel, matching `channels[].channelId` on the submission. Null when the account has since been disconnected — the post outlives the connection, and there is then no token to reach it with. */
+        /** @description The channel, matching `channels[].channelId` on the submission. Null when the account has since been disconnected: the post outlives the connection, and there is then no token to reach it with. */
         channelId: string | null;
         /**
          * @description Its platform. Null for the same reason `channelId` is.
@@ -2206,12 +2219,12 @@ export interface components {
           | 'bluesky'
           | 'reddit'
           | null;
-        /** @description Why this channel is in the list it is in, or null when the takedown succeeded. A sentence for a person to read — several of them are the platform's own words — so branch on which LIST the entry is in, never on this text. */
+        /** @description Why this channel is in the list it is in, or null when the takedown succeeded. A sentence for a person to read (several of them are the platform's own words), so branch on which LIST the entry is in, never on this text. */
         reason: string | null;
       }[];
-      /** @description Channels still live, each with a sentence saying why. A non-empty list means the submission still EXISTS, holding exactly these channels — so `GET /posts/{id}` keeps working and calling retract again takes down what is left. */
+      /** @description Channels still live, each with a sentence saying why. A non-empty list means the submission still EXISTS, holding exactly these channels, so `GET /posts/{id}` keeps working and calling retract again takes down what is left. */
       remaining: {
-        /** @description The channel, matching `channels[].channelId` on the submission. Null when the account has since been disconnected — the post outlives the connection, and there is then no token to reach it with. */
+        /** @description The channel, matching `channels[].channelId` on the submission. Null when the account has since been disconnected: the post outlives the connection, and there is then no token to reach it with. */
         channelId: string | null;
         /**
          * @description Its platform. Null for the same reason `channelId` is.
@@ -2231,41 +2244,46 @@ export interface components {
           | 'bluesky'
           | 'reddit'
           | null;
-        /** @description Why this channel is in the list it is in, or null when the takedown succeeded. A sentence for a person to read — several of them are the platform's own words — so branch on which LIST the entry is in, never on this text. */
+        /** @description Why this channel is in the list it is in, or null when the takedown succeeded. A sentence for a person to read (several of them are the platform's own words), so branch on which LIST the entry is in, never on this text. */
         reason: string | null;
       }[];
     };
     /** @description One block of the published chain. No attachments: no platform will change what a published post carries. */
     RevisePostBlock: {
-      /** @description The block’s new text. Optional and empty is fine — clearing the caption on a published image is a real edit. Send the block even when its text has not changed; unchanged blocks are not sent to the platform, so they cost nothing and never mark a post "edited". */
+      /** @description The block’s new text. Optional and empty is fine: clearing the caption on a published image is a real edit. Send the block even when its text has not changed; unchanged blocks are not sent to the platform, so they cost nothing and never mark a post "edited". */
       content?: string;
     };
-    /** @description One channel’s new wording. Every channel of the submission must appear — what you are describing is how the submission should now read, not a patch against it. */
+    /** @description One channel’s new wording. Every channel of the submission must appear: what you are describing is how the submission should now read, not a patch against it. */
     RevisePostChannel: {
       /**
        * @description A channel id from `GET /public/v1/channels`.
        * @example clx3k2p9q0001abcd1234efgh
        */
       channelId: string;
-      /** @description The title, on platforms that have one AND will change it after publishing — `limits.remoteEdit.fields` on `GET /public/v1/platforms` says which. YouTube will; Reddit will not, and sending one there is `edit_not_supported` rather than a field quietly ignored. */
+      /** @description The title, on platforms that have one AND will change it after publishing (`limits.remoteEdit.fields` on `GET /public/v1/platforms` says which). YouTube will; Reddit will not, and sending one there is `edit_not_supported` rather than a field quietly ignored. */
       title?: string;
-      /** @description The platform’s own fields, where `limits.remoteEdit.fields` includes `options`. */
+      /**
+       * @description The platform’s own fields, where `limits.remoteEdit.fields` includes `options`.
+       * @example {
+       *       "link": "https://example.com/recipes/pesto"
+       *     }
+       */
       options?: {
         [key: string]: string | string[];
       };
-      /** @description Every block of the thread, in order, including unchanged ones. The length must equal what was published — adding or removing a block is `revision_structure_changed`. */
+      /** @description Every block of the thread, in order, including unchanged ones. The length must equal what was published: adding or removing a block is `revision_structure_changed`. */
       blocks: components['schemas']['RevisePostBlock'][];
     };
-    /** @description A revision: the submission as it should now read. Wording only — the channel list and each thread’s length must match what was published, and there is no field for attachments because no platform will change them. */
+    /** @description A revision: the submission as it should now read. Wording only: the channel list and each thread’s length must match what was published, and there is no field for attachments because no platform will change them. */
     RevisePostRequest: {
-      /** @description Every channel of the submission. Omitting one is `revision_structure_changed`, not a channel left alone — call `GET /posts/{id}` and edit what it returns. */
+      /** @description Every channel of the submission. Omitting one is `revision_structure_changed`, not a channel left alone: call `GET /posts/{id}` and edit what it returns. */
       channels: components['schemas']['RevisePostChannel'][];
     };
-    /** @description What a revision did, per channel. A refusal the API could see coming — a platform that edits nothing, a field outside its `remoteEdit.fields`, a structural change — is an ERROR instead, because nothing was sent. */
+    /** @description What a revision did, per channel. A refusal the API could see coming (a platform that edits nothing, a field outside its `remoteEdit.fields`, a structural change) is an ERROR instead, because nothing was sent. */
     ReviseResult: {
       /** @description Channels whose live copy now reads as you sent it. */
       revised: {
-        /** @description The channel, matching `channels[].channelId` on the submission. Null when the account has since been disconnected — the post outlives the connection, and there is then no token to reach it with. */
+        /** @description The channel, matching `channels[].channelId` on the submission. Null when the account has since been disconnected: the post outlives the connection, and there is then no token to reach it with. */
         channelId: string | null;
         /**
          * @description Its platform. Null for the same reason `channelId` is.
@@ -2285,12 +2303,12 @@ export interface components {
           | 'bluesky'
           | 'reddit'
           | null;
-        /** @description Why this channel is in the list it is in, or null when the rewrite succeeded. A sentence for a person to read — several of them are the platform's own words — so branch on which LIST the entry is in, never on this text. */
+        /** @description Why this channel is in the list it is in, or null when the rewrite succeeded. A sentence for a person to read (several of them are the platform's own words), so branch on which LIST the entry is in, never on this text. */
         reason: string | null;
       }[];
-      /** @description Channels that were not rewritten. `reason` tells the two cases apart: null means there was nothing to send — the text already matched — and a sentence means the platform refused. They share a list because the common case is a submission where one channel was fixed and the rest were left alone, which is not a partial failure. */
+      /** @description Channels that were not rewritten. `reason` tells the two cases apart: null means there was nothing to send (the text already matched) and a sentence means the platform refused. They share a list because the common case is a submission where one channel was fixed and the rest were left alone, which is not a partial failure. */
       unchanged: {
-        /** @description The channel, matching `channels[].channelId` on the submission. Null when the account has since been disconnected — the post outlives the connection, and there is then no token to reach it with. */
+        /** @description The channel, matching `channels[].channelId` on the submission. Null when the account has since been disconnected: the post outlives the connection, and there is then no token to reach it with. */
         channelId: string | null;
         /**
          * @description Its platform. Null for the same reason `channelId` is.
@@ -2310,7 +2328,7 @@ export interface components {
           | 'bluesky'
           | 'reddit'
           | null;
-        /** @description Why this channel is in the list it is in, or null when the rewrite succeeded. A sentence for a person to read — several of them are the platform's own words — so branch on which LIST the entry is in, never on this text. */
+        /** @description Why this channel is in the list it is in, or null when the rewrite succeeded. A sentence for a person to read (several of them are the platform's own words), so branch on which LIST the entry is in, never on this text. */
         reason: string | null;
       }[];
     };
@@ -2354,14 +2372,14 @@ export interface components {
        */
       to: string;
       /**
-       * @description The IANA zone `daily[].date` was bucketed in — the one requested, or `UTC`. Echoed because a day boundary is the whole meaning of a daily series: the same publication falls on different dates in different zones.
+       * @description The IANA zone `daily[].date` was bucketed in: the one requested, or `UTC`. Echoed because a day boundary is the whole meaning of a daily series: the same publication falls on different dates in different zones.
        * @example UTC
        */
       timezone: string;
       totals: components['schemas']['StatsTotals'];
       engagement: components['schemas']['StatsEngagementTotals'];
       /**
-       * @description Metric names appearing anywhere in this response, in a stable render order. Empty when nothing was measured — which is how you tell "no engagement reported" from "this API has no engagement". New names may be ADDED over time; treat an unrecognised one as a number you can display, not as an error.
+       * @description Metric names appearing anywhere in this response, in a stable render order. Empty when nothing was measured, which is how you tell "no engagement reported" from "this API has no engagement". New names may be ADDED over time; treat an unrecognised one as a number you can display, not as an error.
        * @example [
        *       "impressions",
        *       "likes",
@@ -2373,15 +2391,15 @@ export interface components {
       queue: components['schemas']['StatsQueue'];
       /** @description One entry per day in the window, zero-filled and ascending. */
       daily: components['schemas']['StatsDay'][];
-      /** @description Busiest first. Every channel connected right now appears, including those that published nothing — a silent account is a finding, not an absence. */
+      /** @description Busiest first. Every channel connected right now appears, including those that published nothing: a silent account is a finding, not an absence. */
       channels: components['schemas']['StatsChannel'][];
-      /** @description Busiest first, and only tags something landed under — unlike `channels`, an unused label is omitted. These figures OVERLAP and do not partition `totals`: a publication carrying two tags is counted under both, one carrying none under neither. Do not render them as shares of a whole. */
+      /** @description Busiest first, and only tags something landed under: unlike `channels`, an unused label is omitted. These figures OVERLAP and do not partition `totals`: a publication carrying two tags is counted under both, one carrying none under neither. Do not render them as shares of a whole. */
       tags: components['schemas']['StatsTag'][];
     };
     /** @description One connected account's share of the window. */
     StatsChannel: {
       /**
-       * @description The connected account, an id from `GET /public/v1/channels`. Null on the single row collecting publications whose account has since been disconnected — which is what keeps these figures summing to `totals`.
+       * @description The connected account, an id from `GET /public/v1/channels`. Null on the single row collecting publications whose account has since been disconnected, which is what keeps these figures summing to `totals`.
        * @example clx3k2p9q0001abcd1234efgh
        */
       channelId: string | null;
@@ -2410,7 +2428,7 @@ export interface components {
     /**
      * @description One calendar day of the window.
      *
-     *     `engagement` here is what the posts published ON THIS DAY have earned, counted since each went out and still moving — NOT engagement earned on this day. The two are easy to confuse into a chart that is wrong in a way nobody can see; the second is not derivable from cumulative readings and this API does not offer it.
+     *     `engagement` here is what the posts published ON THIS DAY have earned, counted since each went out and still moving, NOT engagement earned on this day. The two are easy to confuse into a chart that is wrong in a way nobody can see; the second is not derivable from cumulative readings and this API does not offer it.
      *
      *     Days PARTITION the window, so unlike `tags` these do sum to the response-level `engagement`.
      */
@@ -2428,11 +2446,11 @@ export interface components {
     /** @description What one bucket's publications EARNED, read back from the platforms. */
     StatsEngagement: {
       /**
-       * @description Summed cumulative counts keyed by metric name — the names listed in `metrics` on the response.
+       * @description Summed cumulative counts keyed by metric name: the names listed in `metrics` on the response.
        *
        *     AN ABSENT KEY IS NOT A ZERO. It means no publication in this bucket reported that metric: either its platform does not measure it, or the platform reports no engagement to this API at all. Rendering a missing key as `0` states a fact about engagement that nothing measured.
        *
-       *     Every value is the LATEST reading of each publication, summed — cumulative since the post went out, not earned during the window.
+       *     Every value is the LATEST reading of each publication, summed: cumulative since the post went out, not earned during the window.
        * @example {
        *       "likes": 412,
        *       "comments": 37,
@@ -2442,17 +2460,17 @@ export interface components {
       values: {
         [key: string]: number;
       };
-      /** @description Publications in this bucket carrying any reading at all — the denominator. Compare it against the bucket’s `published` before presenting any figure in `values` as a fact about the whole bucket. */
+      /** @description Publications in this bucket carrying any reading at all: the denominator. Compare it against the bucket’s `published` before presenting any figure in `values` as a fact about the whole bucket. */
       measured: number;
     };
-    /** @description Engagement for the whole window, with per-metric coverage. Summed across CHANNELS, which partition the window — never across tags, which overlap. */
+    /** @description Engagement for the whole window, with per-metric coverage. Summed across CHANNELS, which partition the window, never across tags, which overlap. */
     StatsEngagementTotals: {
       /**
-       * @description Summed cumulative counts keyed by metric name — the names listed in `metrics` on the response.
+       * @description Summed cumulative counts keyed by metric name: the names listed in `metrics` on the response.
        *
        *     AN ABSENT KEY IS NOT A ZERO. It means no publication in this bucket reported that metric: either its platform does not measure it, or the platform reports no engagement to this API at all. Rendering a missing key as `0` states a fact about engagement that nothing measured.
        *
-       *     Every value is the LATEST reading of each publication, summed — cumulative since the post went out, not earned during the window.
+       *     Every value is the LATEST reading of each publication, summed: cumulative since the post went out, not earned during the window.
        * @example {
        *       "likes": 412,
        *       "comments": 37,
@@ -2510,14 +2528,14 @@ export interface components {
       /** @description Busiest first. OVERLAPPING: a post with two tags is in both, and an untagged post in none. */
       tags: components['schemas']['InsightTag'][];
     };
-    /** @description A snapshot of RIGHT NOW. Unaffected by `from`/`to` — mixing pending work into a window total would produce a number meaning two things at once. */
+    /** @description A snapshot of RIGHT NOW. Unaffected by `from`/`to`: mixing pending work into a window total would produce a number meaning two things at once. */
     StatsQueue: {
       /** @description Publications scheduled ahead of now, including any mid-flight. */
       scheduled: number;
       /** @description Drafts held in the workspace, at any age. */
       drafts: number;
     };
-    /** @description One tag's share of the window. Overlapping rather than a partition — see the field description on Stats. */
+    /** @description One tag's share of the window. Overlapping rather than a partition (see the field description on Stats). */
     StatsTag: {
       /**
        * @description A tag id from `GET /public/v1/tags`.
@@ -2538,7 +2556,7 @@ export interface components {
     /** @description A workspace’s own label for a submission. Ours, not any platform’s: a tag is not a hashtag, is never published, and no provider is told it exists. */
     Tag: {
       /**
-       * @description Use this in `tagIds` when creating a submission, and as `?tag=` when listing them. Address tags by id, never by name — the name is the field a workspace edits.
+       * @description Use this in `tagIds` when creating a submission, and as `?tag=` when listing them. Address tags by id, never by name: the name is the field a workspace edits.
        * @example clx3k2p9q0001abcd1234efgh
        */
       id: string;
@@ -2558,7 +2576,7 @@ export interface components {
        */
       postCount: number;
     };
-    /** @description Only the fields you send are changed — a partial update, despite the PUT. An endpoint has no parts to reconcile, so there is no half-state a partial body could leave behind. */
+    /** @description Only the fields you send are changed: a partial update, despite the PUT. An endpoint has no parts to reconcile, so there is no half-state a partial body could leave behind. */
     UpdateWebhookRequest: {
       /**
        * Format: uri
@@ -2579,11 +2597,11 @@ export interface components {
     UploadMediaRequest: {
       /**
        * Format: binary
-       * @description JPEG, PNG, WebP, GIF, MP4, MOV, PDF, VTT or SRT. Images up to 10 MB, video and PDFs up to 100 MB, subtitle files up to 5 MB. A larger video, up to the plan’s video cap, goes through `POST /media/uploads` instead. Not every platform publishes every type — check `acceptedMimeTypes` on `GET /platforms`, where a PDF appears only for the platforms that publish a document post, and where a subtitle file appears on none: it is never an attachment, and reaches a platform through a `media` option instead (see YouTube’s `captionFile`). The bytes are proxied through the API rather than handed a presigned bucket URL, so the server sees the real content and a file whose bytes disagree with its declared type is rejected. A subtitle file sent as `application/octet-stream` — which is what an unconfigured client sends, since no system registers a type for `.srt` — is read from the filename’s extension instead, and then verified like everything else.
+       * @description JPEG, PNG, WebP, GIF, MP4, MOV, PDF, VTT or SRT. Images up to 10 MB, video and PDFs up to 100 MB, subtitle files up to 5 MB. A larger video, up to the plan’s video cap, goes through `POST /media/uploads` instead. Not every platform publishes every type: check `acceptedMimeTypes` on `GET /platforms`, where a PDF appears only for the platforms that publish a document post, and where a subtitle file appears on none: it is never an attachment, and reaches a platform through a `media` option instead (see YouTube’s `captionFile`). The bytes are proxied through the API rather than handed a presigned bucket URL, so the server sees the real content and a file whose bytes disagree with its declared type is rejected. A subtitle file sent as `application/octet-stream` (which is what an unconfigured client sends, since no system registers a type for `.srt`) is read from the filename’s extension instead, and then verified like everything else.
        */
       file: string;
     };
-    /** @description Consumption against the plan, for the whole ACCOUNT this workspace belongs to — a plan is bought once and every workspace its owner owns draws from one pool. These are the same events an invoice is computed from; a usage endpoint that disagreed with the bill would be worse than none. */
+    /** @description Consumption against the plan, for the whole ACCOUNT this workspace belongs to: a plan is bought once and every workspace its owner owns draws from one pool. These are the same events an invoice is computed from; a usage endpoint that disagreed with the bill would be worse than none. */
     Usage: {
       /**
        * @description The tier the account behind this workspace is on.
@@ -2598,15 +2616,17 @@ export interface components {
       periodStart: string;
       /**
        * Format: date-time
-       * @description EXCLUSIVE end — the instant the period figures reset.
+       * @description EXCLUSIVE end: the instant the period figures reset.
        * @example 2026-08-04T09:30:00.000Z
        */
       periodEnd: string;
-      /** @description Two figures because they answer different questions. `created` is what the monthly allowance is enforced against — the number that will refuse your next write. `published` is what a bill is computed from. */
+      /** @description Two figures because they answer different questions. `created` is what a hard cap is enforced against: posts published this period plus posts still waiting to publish, so a deleted or failed post gives its place back. Only a trial, or an account whose last payment failed, has a cap; `limit` is null otherwise. `published` is what a bill is computed from. */
       posts: {
         created: components['schemas']['UsageMetric'];
-        /** @description The billable figure: publications that actually reached a platform. Shares `created`’s limit; the allowance is one. */
+        /** @description The billable figure: posts and comment replies that actually reached a platform this billing period. */
         published: number;
+        /** @description How many published actions the plan includes this period. Each one past it is billed per action, not refused. Null when nothing is metered. */
+        included: number | null;
       };
       channels: components['schemas']['UsageMetric'];
       storage: {
@@ -2617,7 +2637,7 @@ export interface components {
     /** @description One metered resource: what has been used, and the ceiling. */
     UsageMetric: {
       used: number;
-      /** @description Null means unlimited — not "unknown", and not a large number. */
+      /** @description Null means unlimited, not "unknown", and not a large number. */
       limit: number | null;
     };
     /** @description The `data` of a `channel.needs_reconnect` event. */
@@ -2637,7 +2657,7 @@ export interface components {
        */
       id: string;
       /**
-       * @description The event. Stable across every redelivery — this is what a subscriber dedupes on, and it is also the `id` in the body and the `X-Bulkit-Event-Id` header.
+       * @description The event. Stable across every redelivery: this is what a subscriber dedupes on, and it is also the `id` in the body and the `X-Bulkit-Event-Id` header.
        * @example clx3k2p9q0001abcd1234efgh
        */
       eventId: string;
@@ -2656,16 +2676,16 @@ export interface components {
        */
       endpointId: string;
       /**
-       * @description `pending` — not accepted yet, and may still be retried. `succeeded` — your server returned a 2xx. `failed` — the retry budget is spent and nothing further will be attempted.
+       * @description `pending`: not accepted yet, and may still be retried. `succeeded`: your server returned a 2xx. `failed`: the retry budget is spent and nothing further will be attempted.
        * @enum {string}
        */
       status: 'pending' | 'succeeded' | 'failed';
       /** @description How many times we have sent it. */
       attempts: number;
-      /** @description Your server’s HTTP status on the last attempt. Null when we never got one — DNS, TLS, refused, timed out. Your response BODY is never stored or returned. */
+      /** @description Your server’s HTTP status on the last attempt. Null when we never got one: DNS, TLS, refused, timed out. Your response BODY is never stored or returned. */
       responseStatus: number | null;
       /**
-       * @description Why the last attempt failed, in OUR words — never anything your server sent back.
+       * @description Why the last attempt failed, in OUR words, never anything your server sent back.
        * @example No response within 10s
        */
       error: string | null;
@@ -2692,7 +2712,7 @@ export interface components {
       nextCursor: string | null;
       hasMore: boolean;
     };
-    /** @description A registered destination for events. The signing secret is deliberately absent — it is returned only when the endpoint is created or its secret is rolled, and no route reads it back. */
+    /** @description A registered destination for events. The signing secret is deliberately absent: it is returned only when the endpoint is created or its secret is rolled, and no route reads it back. */
     WebhookEndpoint: {
       /**
        * @description The endpoint id.
@@ -2715,11 +2735,11 @@ export interface components {
         | 'channel.needs_reconnect'
       )[];
       /**
-       * @description `disabled` means nothing is being delivered — either you switched it off, or we did after repeated failures. `disabledReason` tells them apart.
+       * @description `disabled` means nothing is being delivered: either you switched it off, or we did after repeated failures. `disabledReason` tells them apart.
        * @enum {string}
        */
       status: 'enabled' | 'disabled';
-      /** @description Why WE stopped delivering. Null while enabled, and null when you disabled it yourself — that needs no explanation from us. */
+      /** @description Why WE stopped delivering. Null while enabled, and null when you disabled it yourself; that needs no explanation from us. */
       disabledReason: string | null;
       /**
        * Format: date-time
@@ -2727,7 +2747,7 @@ export interface components {
        * @example 2026-08-04T09:30:00.000Z
        */
       disabledAt: string | null;
-      /** @description Last 4 characters of the signing secret currently in force — enough to tell which secret a receiver is configured with, after the one time it was shown. */
+      /** @description Last 4 characters of the signing secret currently in force: enough to tell which secret a receiver is configured with, after the one time it was shown. */
       secretLast4: string;
       /**
        * Format: date-time
@@ -2742,7 +2762,7 @@ export interface components {
        */
       updatedAt: string;
     };
-    /** @description The body POSTed to your endpoint. Documented here for reference — no operation on this API returns it. */
+    /** @description The body POSTed to your endpoint. Documented here for reference: no operation on this API returns it. */
     WebhookEvent: {
       /**
        * @description The event id, stable across every redelivery. Dedupe on this: delivery is at-least-once, so a receiver that 200s after its own timeout will be sent the same event again.
@@ -2756,7 +2776,7 @@ export interface components {
       type: 'post.published' | 'post.failed' | 'post.partially_failed' | 'channel.needs_reconnect';
       /**
        * Format: date-time
-       * @description When the fact became true — not when this attempt was sent.
+       * @description When the fact became true, not when this attempt was sent.
        * @example 2026-08-04T09:30:00.000Z
        */
       createdAt: string;
@@ -2766,7 +2786,7 @@ export interface components {
     /** @description The `data` of a `post.*` event. The whole submission travels with it, in the shape `GET /posts/{id}` returns, so an ordinary subscriber never has to call back. */
     WebhookPostData: {
       post: components['schemas']['Post'];
-      /** @description The channel this event is about. `post.*` events fire ONCE PER CHANNEL — each channel of a submission publishes independently, with its own status and its own retry, so there is no single moment at which "the submission" published. */
+      /** @description The channel this event is about. `post.*` events fire ONCE PER CHANNEL: each channel of a submission publishes independently, with its own status and its own retry, so there is no single moment at which "the submission" published. */
       channelId: string | null;
       /**
        * @description That channel’s platform.
@@ -2846,7 +2866,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -2874,7 +2894,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -2942,7 +2962,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -2979,7 +2999,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -3063,7 +3083,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -3100,7 +3120,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -3113,20 +3133,34 @@ export interface operations {
   };
   PublicMediaController_list: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description The previous page’s `nextCursor`. Opaque: a value we did not issue is rejected rather than silently restarting at page one. */
+        cursor?: unknown;
+        /** @description Page size. Clamped to 100; asking for more is not an error. */
+        limit?: number;
+      };
       header?: never;
       path?: never;
       cookie?: never;
     };
     requestBody?: never;
     responses: {
-      /** @description The organization’s library, newest first. */
+      /** @description A page of the organization’s library. */
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['MediaItem'][];
+          'application/json': components['schemas']['MediaPage'];
+        };
+      };
+      /** @description The request is malformed, or a platform rule rejects it. `error.field` points at the part of the body that caused it, and `error.details` lists every field when validation rejected more than one. */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Error'];
         };
       };
       /** @description No API key was presented, or the one presented is unknown, revoked or expired. Presented-but-rejected and never-presented are told apart in `error.message`; *why* a presented key failed is deliberately not. */
@@ -3138,7 +3172,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -3166,7 +3200,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -3217,7 +3251,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description The plan’s allowance for this period is spent (`quota_exceeded`). NOT retryable — nothing about your request timing will help, and the limit resets at `periodEnd` from `GET /public/v1/usage`. Distinct from 429 on purpose. */
+      /** @description The plan’s allowance for this period is spent (`quota_exceeded`). NOT retryable: nothing about your request timing will help, and the limit resets at `periodEnd` from `GET /public/v1/usage`. Distinct from 429 on purpose. */
       402: {
         headers: {
           [name: string]: unknown;
@@ -3235,7 +3269,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `payload_too_large` — an upload past the per-kind ceiling (10 MB for images, 100 MB for video and documents, 5 MB for subtitle files), or a JSON body past the one a request may carry. A larger video goes through `POST /media/uploads`, where the ceiling is the plan’s video cap instead and going over it is a 402. A limit on the resource, not on the plan: a bigger plan does not raise it. */
+      /** @description `payload_too_large`: an upload past the per-kind ceiling (10 MB for images, 100 MB for video and documents, 5 MB for subtitle files), or a JSON body past the one a request may carry. A larger video goes through `POST /media/uploads`, where the ceiling is the plan’s video cap instead and going over it is a 402. A limit on the resource, not on the plan: a bigger plan does not raise it. */
       413: {
         headers: {
           [name: string]: unknown;
@@ -3244,7 +3278,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `unsupported_media_type` — that file type is not something any supported platform can publish. Accepting it would upload cleanly and then fail at publish, which is the failure this refusal exists to prevent. */
+      /** @description `unsupported_media_type`: that file type is not something any supported platform can publish. Accepting it would upload cleanly and then fail at publish, which is the failure this refusal exists to prevent. */
       415: {
         headers: {
           [name: string]: unknown;
@@ -3253,7 +3287,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -3281,7 +3315,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -3297,11 +3331,11 @@ export interface operations {
       query?: never;
       header?: {
         /**
-         * @description Send one on every write. A retry carrying the same key returns the FIRST response instead of doing the work twice — without it, a client that times out and retries schedules the post a second time, and the first is already queued.
+         * @description Send one on every write. A retry carrying the same key returns the FIRST response instead of doing the work twice. Without it, a client that times out and retries schedules the post a second time, and the first is already queued.
          *
          *     Any string up to 255 characters; a UUID per logical operation is the usual choice. Keys are scoped to your workspace and honoured for 24 hours. The same key on a different route or id, or with a different body, is a `422`; a request still running under this key is a `409 request_in_progress`.
          *
-         *     What a FAILED request does to its key depends on whether it could have changed anything. A `4xx` releases it — every one of them is raised before we write a thing, so fix the input and retry with the same key. A `5xx` pins it, and the retry replays that failure instead of doing the work: a write is several posts and several workflows, so a fault partway through leaves some of them done, and a fresh attempt would publish those a second time. Read `GET /posts/{id}` to see what exists, then continue with a new key.
+         *     What a FAILED request does to its key depends on whether it could have changed anything. A `4xx` releases it: every one of them is raised before we write a thing, so fix the input and retry with the same key. A `5xx` pins it, and the retry replays that failure instead of doing the work: a write is several posts and several workflows, so a fault partway through leaves some of them done, and a fresh attempt would publish those a second time. Read `GET /posts/{id}` to see what exists, then continue with a new key.
          */
         'Idempotency-Key'?: string;
       };
@@ -3341,7 +3375,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description The plan’s allowance for this period is spent (`quota_exceeded`). NOT retryable — nothing about your request timing will help, and the limit resets at `periodEnd` from `GET /public/v1/usage`. Distinct from 429 on purpose. */
+      /** @description The plan’s allowance for this period is spent (`quota_exceeded`). NOT retryable: nothing about your request timing will help, and the limit resets at `periodEnd` from `GET /public/v1/usage`. Distinct from 429 on purpose. */
       402: {
         headers: {
           [name: string]: unknown;
@@ -3359,7 +3393,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `payload_too_large` — an upload past the per-kind ceiling (10 MB for images, 100 MB for video and documents, 5 MB for subtitle files), or a JSON body past the one a request may carry. A larger video goes through `POST /media/uploads`, where the ceiling is the plan’s video cap instead and going over it is a 402. A limit on the resource, not on the plan: a bigger plan does not raise it. */
+      /** @description `payload_too_large`: an upload past the per-kind ceiling (10 MB for images, 100 MB for video and documents, 5 MB for subtitle files), or a JSON body past the one a request may carry. A larger video goes through `POST /media/uploads`, where the ceiling is the plan’s video cap instead and going over it is a 402. A limit on the resource, not on the plan: a bigger plan does not raise it. */
       413: {
         headers: {
           [name: string]: unknown;
@@ -3368,7 +3402,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `unsupported_media_type` — that file type is not something any supported platform can publish. Accepting it would upload cleanly and then fail at publish, which is the failure this refusal exists to prevent. */
+      /** @description `unsupported_media_type`: that file type is not something any supported platform can publish. Accepting it would upload cleanly and then fail at publish, which is the failure this refusal exists to prevent. */
       415: {
         headers: {
           [name: string]: unknown;
@@ -3386,7 +3420,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -3414,7 +3448,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -3471,7 +3505,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -3499,7 +3533,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -3515,11 +3549,11 @@ export interface operations {
       query?: never;
       header?: {
         /**
-         * @description Send one on every write. A retry carrying the same key returns the FIRST response instead of doing the work twice — without it, a client that times out and retries schedules the post a second time, and the first is already queued.
+         * @description Send one on every write. A retry carrying the same key returns the FIRST response instead of doing the work twice. Without it, a client that times out and retries schedules the post a second time, and the first is already queued.
          *
          *     Any string up to 255 characters; a UUID per logical operation is the usual choice. Keys are scoped to your workspace and honoured for 24 hours. The same key on a different route or id, or with a different body, is a `422`; a request still running under this key is a `409 request_in_progress`.
          *
-         *     What a FAILED request does to its key depends on whether it could have changed anything. A `4xx` releases it — every one of them is raised before we write a thing, so fix the input and retry with the same key. A `5xx` pins it, and the retry replays that failure instead of doing the work: a write is several posts and several workflows, so a fault partway through leaves some of them done, and a fresh attempt would publish those a second time. Read `GET /posts/{id}` to see what exists, then continue with a new key.
+         *     What a FAILED request does to its key depends on whether it could have changed anything. A `4xx` releases it: every one of them is raised before we write a thing, so fix the input and retry with the same key. A `5xx` pins it, and the retry replays that failure instead of doing the work: a write is several posts and several workflows, so a fault partway through leaves some of them done, and a fresh attempt would publish those a second time. Read `GET /posts/{id}` to see what exists, then continue with a new key.
          */
         'Idempotency-Key'?: string;
       };
@@ -3585,7 +3619,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `unsupported_media_type` — that file type is not something any supported platform can publish. Accepting it would upload cleanly and then fail at publish, which is the failure this refusal exists to prevent. */
+      /** @description `unsupported_media_type`: that file type is not something any supported platform can publish. Accepting it would upload cleanly and then fail at publish, which is the failure this refusal exists to prevent. */
       415: {
         headers: {
           [name: string]: unknown;
@@ -3603,7 +3637,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -3631,7 +3665,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -3703,7 +3737,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -3731,7 +3765,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -3788,7 +3822,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -3816,7 +3850,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -3854,7 +3888,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -3882,7 +3916,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -3896,15 +3930,15 @@ export interface operations {
   PublicPostsController_list: {
     parameters: {
       query?: {
-        /** @description The previous page’s `nextCursor`. Opaque — a value we did not issue is rejected rather than silently restarting at page one, because a paged export that quietly rewinds re-processes everything and the client has no way to notice. */
+        /** @description The previous page’s `nextCursor`. Opaque: a value we did not issue is rejected rather than silently restarting at page one, because a paged export that quietly rewinds re-processes everything and the client has no way to notice. */
         cursor?: unknown;
         /** @description Inclusive start of a scheduling window. */
         from?: string;
         /** @description Page size. Clamped to 100; asking for more is not an error. */
         limit?: number;
-        /** @description Repeatable: `?status=scheduled&status=failed`. `partially_published` is absent because it is computed across a submission’s channels rather than stored on any of them — filter on `published` or `failed` and read the rolled-up `status` you get back. */
+        /** @description Repeatable: `?status=scheduled&status=failed`. `partially_published` is absent because it is computed across a submission’s channels rather than stored on any of them. Filter on `published` or `failed` and read the rolled-up `status` you get back. */
         status?: ('draft' | 'scheduled' | 'publishing' | 'published' | 'failed')[];
-        /** @description Repeatable: `?tag=tag_a&tag=tag_b`. Tag ids from `GET /public/v1/tags`. ORs, like `status` — a submission matches if it carries any of them. An id this workspace does not own matches nothing rather than erroring. */
+        /** @description Repeatable: `?tag=tag_a&tag=tag_b`. Tag ids from `GET /public/v1/tags`. ORs, like `status`: a submission matches if it carries any of them. An id this workspace does not own matches nothing rather than erroring. */
         tag?: string[];
         /** @description Inclusive end of a scheduling window. */
         to?: string;
@@ -3942,7 +3976,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -3970,7 +4004,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -3986,11 +4020,11 @@ export interface operations {
       query?: never;
       header?: {
         /**
-         * @description Send one on every write. A retry carrying the same key returns the FIRST response instead of doing the work twice — without it, a client that times out and retries schedules the post a second time, and the first is already queued.
+         * @description Send one on every write. A retry carrying the same key returns the FIRST response instead of doing the work twice. Without it, a client that times out and retries schedules the post a second time, and the first is already queued.
          *
          *     Any string up to 255 characters; a UUID per logical operation is the usual choice. Keys are scoped to your workspace and honoured for 24 hours. The same key on a different route or id, or with a different body, is a `422`; a request still running under this key is a `409 request_in_progress`.
          *
-         *     What a FAILED request does to its key depends on whether it could have changed anything. A `4xx` releases it — every one of them is raised before we write a thing, so fix the input and retry with the same key. A `5xx` pins it, and the retry replays that failure instead of doing the work: a write is several posts and several workflows, so a fault partway through leaves some of them done, and a fresh attempt would publish those a second time. Read `GET /posts/{id}` to see what exists, then continue with a new key.
+         *     What a FAILED request does to its key depends on whether it could have changed anything. A `4xx` releases it: every one of them is raised before we write a thing, so fix the input and retry with the same key. A `5xx` pins it, and the retry replays that failure instead of doing the work: a write is several posts and several workflows, so a fault partway through leaves some of them done, and a fresh attempt would publish those a second time. Read `GET /posts/{id}` to see what exists, then continue with a new key.
          */
         'Idempotency-Key'?: string;
       };
@@ -4030,7 +4064,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description The plan’s allowance for this period is spent (`quota_exceeded`). NOT retryable — nothing about your request timing will help, and the limit resets at `periodEnd` from `GET /public/v1/usage`. Distinct from 429 on purpose. */
+      /** @description The plan’s allowance for this period is spent (`quota_exceeded`). NOT retryable: nothing about your request timing will help, and the limit resets at `periodEnd` from `GET /public/v1/usage`. Distinct from 429 on purpose. */
       402: {
         headers: {
           [name: string]: unknown;
@@ -4048,7 +4082,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `payload_too_large` — an upload past the per-kind ceiling (10 MB for images, 100 MB for video and documents, 5 MB for subtitle files), or a JSON body past the one a request may carry. A larger video goes through `POST /media/uploads`, where the ceiling is the plan’s video cap instead and going over it is a 402. A limit on the resource, not on the plan: a bigger plan does not raise it. */
+      /** @description `payload_too_large`: an upload past the per-kind ceiling (10 MB for images, 100 MB for video and documents, 5 MB for subtitle files), or a JSON body past the one a request may carry. A larger video goes through `POST /media/uploads`, where the ceiling is the plan’s video cap instead and going over it is a 402. A limit on the resource, not on the plan: a bigger plan does not raise it. */
       413: {
         headers: {
           [name: string]: unknown;
@@ -4066,7 +4100,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -4094,7 +4128,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -4144,7 +4178,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -4172,7 +4206,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -4188,11 +4222,11 @@ export interface operations {
       query?: never;
       header?: {
         /**
-         * @description Send one on every write. A retry carrying the same key returns the FIRST response instead of doing the work twice — without it, a client that times out and retries schedules the post a second time, and the first is already queued.
+         * @description Send one on every write. A retry carrying the same key returns the FIRST response instead of doing the work twice. Without it, a client that times out and retries schedules the post a second time, and the first is already queued.
          *
          *     Any string up to 255 characters; a UUID per logical operation is the usual choice. Keys are scoped to your workspace and honoured for 24 hours. The same key on a different route or id, or with a different body, is a `422`; a request still running under this key is a `409 request_in_progress`.
          *
-         *     What a FAILED request does to its key depends on whether it could have changed anything. A `4xx` releases it — every one of them is raised before we write a thing, so fix the input and retry with the same key. A `5xx` pins it, and the retry replays that failure instead of doing the work: a write is several posts and several workflows, so a fault partway through leaves some of them done, and a fresh attempt would publish those a second time. Read `GET /posts/{id}` to see what exists, then continue with a new key.
+         *     What a FAILED request does to its key depends on whether it could have changed anything. A `4xx` releases it: every one of them is raised before we write a thing, so fix the input and retry with the same key. A `5xx` pins it, and the retry replays that failure instead of doing the work: a write is several posts and several workflows, so a fault partway through leaves some of them done, and a fresh attempt would publish those a second time. Read `GET /posts/{id}` to see what exists, then continue with a new key.
          */
         'Idempotency-Key'?: string;
       };
@@ -4235,7 +4269,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description The plan’s allowance for this period is spent (`quota_exceeded`). NOT retryable — nothing about your request timing will help, and the limit resets at `periodEnd` from `GET /public/v1/usage`. Distinct from 429 on purpose. */
+      /** @description The plan’s allowance for this period is spent (`quota_exceeded`). NOT retryable: nothing about your request timing will help, and the limit resets at `periodEnd` from `GET /public/v1/usage`. Distinct from 429 on purpose. */
       402: {
         headers: {
           [name: string]: unknown;
@@ -4271,7 +4305,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `payload_too_large` — an upload past the per-kind ceiling (10 MB for images, 100 MB for video and documents, 5 MB for subtitle files), or a JSON body past the one a request may carry. A larger video goes through `POST /media/uploads`, where the ceiling is the plan’s video cap instead and going over it is a 402. A limit on the resource, not on the plan: a bigger plan does not raise it. */
+      /** @description `payload_too_large`: an upload past the per-kind ceiling (10 MB for images, 100 MB for video and documents, 5 MB for subtitle files), or a JSON body past the one a request may carry. A larger video goes through `POST /media/uploads`, where the ceiling is the plan’s video cap instead and going over it is a 402. A limit on the resource, not on the plan: a bigger plan does not raise it. */
       413: {
         headers: {
           [name: string]: unknown;
@@ -4289,7 +4323,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -4317,7 +4351,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -4374,7 +4408,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -4402,7 +4436,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -4484,7 +4518,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -4521,7 +4555,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -4537,11 +4571,11 @@ export interface operations {
       query?: never;
       header?: {
         /**
-         * @description Send one on every write. A retry carrying the same key returns the FIRST response instead of doing the work twice — without it, a client that times out and retries schedules the post a second time, and the first is already queued.
+         * @description Send one on every write. A retry carrying the same key returns the FIRST response instead of doing the work twice. Without it, a client that times out and retries schedules the post a second time, and the first is already queued.
          *
          *     Any string up to 255 characters; a UUID per logical operation is the usual choice. Keys are scoped to your workspace and honoured for 24 hours. The same key on a different route or id, or with a different body, is a `422`; a request still running under this key is a `409 request_in_progress`.
          *
-         *     What a FAILED request does to its key depends on whether it could have changed anything. A `4xx` releases it — every one of them is raised before we write a thing, so fix the input and retry with the same key. A `5xx` pins it, and the retry replays that failure instead of doing the work: a write is several posts and several workflows, so a fault partway through leaves some of them done, and a fresh attempt would publish those a second time. Read `GET /posts/{id}` to see what exists, then continue with a new key.
+         *     What a FAILED request does to its key depends on whether it could have changed anything. A `4xx` releases it: every one of them is raised before we write a thing, so fix the input and retry with the same key. A `5xx` pins it, and the retry replays that failure instead of doing the work: a write is several posts and several workflows, so a fault partway through leaves some of them done, and a fresh attempt would publish those a second time. Read `GET /posts/{id}` to see what exists, then continue with a new key.
          */
         'Idempotency-Key'?: string;
       };
@@ -4586,7 +4620,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description The plan’s allowance for this period is spent (`quota_exceeded`). NOT retryable — nothing about your request timing will help, and the limit resets at `periodEnd` from `GET /public/v1/usage`. Distinct from 429 on purpose. */
+      /** @description The plan’s allowance for this period is spent (`quota_exceeded`). NOT retryable: nothing about your request timing will help, and the limit resets at `periodEnd` from `GET /public/v1/usage`. Distinct from 429 on purpose. */
       402: {
         headers: {
           [name: string]: unknown;
@@ -4631,7 +4665,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -4668,7 +4702,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -4718,7 +4752,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -4746,7 +4780,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -4762,11 +4796,11 @@ export interface operations {
       query?: never;
       header?: {
         /**
-         * @description Send one on every write. A retry carrying the same key returns the FIRST response instead of doing the work twice — without it, a client that times out and retries schedules the post a second time, and the first is already queued.
+         * @description Send one on every write. A retry carrying the same key returns the FIRST response instead of doing the work twice. Without it, a client that times out and retries schedules the post a second time, and the first is already queued.
          *
          *     Any string up to 255 characters; a UUID per logical operation is the usual choice. Keys are scoped to your workspace and honoured for 24 hours. The same key on a different route or id, or with a different body, is a `422`; a request still running under this key is a `409 request_in_progress`.
          *
-         *     What a FAILED request does to its key depends on whether it could have changed anything. A `4xx` releases it — every one of them is raised before we write a thing, so fix the input and retry with the same key. A `5xx` pins it, and the retry replays that failure instead of doing the work: a write is several posts and several workflows, so a fault partway through leaves some of them done, and a fresh attempt would publish those a second time. Read `GET /posts/{id}` to see what exists, then continue with a new key.
+         *     What a FAILED request does to its key depends on whether it could have changed anything. A `4xx` releases it: every one of them is raised before we write a thing, so fix the input and retry with the same key. A `5xx` pins it, and the retry replays that failure instead of doing the work: a write is several posts and several workflows, so a fault partway through leaves some of them done, and a fresh attempt would publish those a second time. Read `GET /posts/{id}` to see what exists, then continue with a new key.
          */
         'Idempotency-Key'?: string;
       };
@@ -4778,7 +4812,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description The submission, with the queued channels now `publishing`. 201 rather than 200 — the framework default for POST; nothing new was created. */
+      /** @description The submission, with the queued channels now `publishing`. 201 rather than 200 (the framework default for POST); nothing new was created. */
       201: {
         headers: {
           [name: string]: unknown;
@@ -4805,7 +4839,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description The plan’s allowance for this period is spent (`quota_exceeded`). NOT retryable — nothing about your request timing will help, and the limit resets at `periodEnd` from `GET /public/v1/usage`. Distinct from 429 on purpose. */
+      /** @description The plan’s allowance for this period is spent (`quota_exceeded`). NOT retryable: nothing about your request timing will help, and the limit resets at `periodEnd` from `GET /public/v1/usage`. Distinct from 429 on purpose. */
       402: {
         headers: {
           [name: string]: unknown;
@@ -4850,7 +4884,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -4878,7 +4912,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -4946,7 +4980,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -4974,7 +5008,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -5055,7 +5089,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -5083,7 +5117,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -5137,7 +5171,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -5165,7 +5199,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -5238,7 +5272,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -5266,7 +5300,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -5304,7 +5338,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -5332,7 +5366,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -5379,7 +5413,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -5407,7 +5441,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -5445,7 +5479,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -5473,7 +5507,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -5489,11 +5523,11 @@ export interface operations {
       query?: never;
       header?: {
         /**
-         * @description Send one on every write. A retry carrying the same key returns the FIRST response instead of doing the work twice — without it, a client that times out and retries schedules the post a second time, and the first is already queued.
+         * @description Send one on every write. A retry carrying the same key returns the FIRST response instead of doing the work twice. Without it, a client that times out and retries schedules the post a second time, and the first is already queued.
          *
          *     Any string up to 255 characters; a UUID per logical operation is the usual choice. Keys are scoped to your workspace and honoured for 24 hours. The same key on a different route or id, or with a different body, is a `422`; a request still running under this key is a `409 request_in_progress`.
          *
-         *     What a FAILED request does to its key depends on whether it could have changed anything. A `4xx` releases it — every one of them is raised before we write a thing, so fix the input and retry with the same key. A `5xx` pins it, and the retry replays that failure instead of doing the work: a write is several posts and several workflows, so a fault partway through leaves some of them done, and a fresh attempt would publish those a second time. Read `GET /posts/{id}` to see what exists, then continue with a new key.
+         *     What a FAILED request does to its key depends on whether it could have changed anything. A `4xx` releases it: every one of them is raised before we write a thing, so fix the input and retry with the same key. A `5xx` pins it, and the retry replays that failure instead of doing the work: a write is several posts and several workflows, so a fault partway through leaves some of them done, and a fresh attempt would publish those a second time. Read `GET /posts/{id}` to see what exists, then continue with a new key.
          */
         'Idempotency-Key'?: string;
       };
@@ -5551,7 +5585,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -5579,7 +5613,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -5629,7 +5663,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -5657,7 +5691,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -5673,11 +5707,11 @@ export interface operations {
       query?: never;
       header?: {
         /**
-         * @description Send one on every write. A retry carrying the same key returns the FIRST response instead of doing the work twice — without it, a client that times out and retries schedules the post a second time, and the first is already queued.
+         * @description Send one on every write. A retry carrying the same key returns the FIRST response instead of doing the work twice. Without it, a client that times out and retries schedules the post a second time, and the first is already queued.
          *
          *     Any string up to 255 characters; a UUID per logical operation is the usual choice. Keys are scoped to your workspace and honoured for 24 hours. The same key on a different route or id, or with a different body, is a `422`; a request still running under this key is a `409 request_in_progress`.
          *
-         *     What a FAILED request does to its key depends on whether it could have changed anything. A `4xx` releases it — every one of them is raised before we write a thing, so fix the input and retry with the same key. A `5xx` pins it, and the retry replays that failure instead of doing the work: a write is several posts and several workflows, so a fault partway through leaves some of them done, and a fresh attempt would publish those a second time. Read `GET /posts/{id}` to see what exists, then continue with a new key.
+         *     What a FAILED request does to its key depends on whether it could have changed anything. A `4xx` releases it: every one of them is raised before we write a thing, so fix the input and retry with the same key. A `5xx` pins it, and the retry replays that failure instead of doing the work: a write is several posts and several workflows, so a fault partway through leaves some of them done, and a fresh attempt would publish those a second time. Read `GET /posts/{id}` to see what exists, then continue with a new key.
          */
         'Idempotency-Key'?: string;
       };
@@ -5747,7 +5781,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -5775,7 +5809,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -5832,7 +5866,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -5860,7 +5894,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -5924,7 +5958,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -5952,7 +5986,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -5968,11 +6002,11 @@ export interface operations {
       query?: never;
       header?: {
         /**
-         * @description Send one on every write. A retry carrying the same key returns the FIRST response instead of doing the work twice — without it, a client that times out and retries schedules the post a second time, and the first is already queued.
+         * @description Send one on every write. A retry carrying the same key returns the FIRST response instead of doing the work twice. Without it, a client that times out and retries schedules the post a second time, and the first is already queued.
          *
          *     Any string up to 255 characters; a UUID per logical operation is the usual choice. Keys are scoped to your workspace and honoured for 24 hours. The same key on a different route or id, or with a different body, is a `422`; a request still running under this key is a `409 request_in_progress`.
          *
-         *     What a FAILED request does to its key depends on whether it could have changed anything. A `4xx` releases it — every one of them is raised before we write a thing, so fix the input and retry with the same key. A `5xx` pins it, and the retry replays that failure instead of doing the work: a write is several posts and several workflows, so a fault partway through leaves some of them done, and a fresh attempt would publish those a second time. Read `GET /posts/{id}` to see what exists, then continue with a new key.
+         *     What a FAILED request does to its key depends on whether it could have changed anything. A `4xx` releases it: every one of them is raised before we write a thing, so fix the input and retry with the same key. A `5xx` pins it, and the retry replays that failure instead of doing the work: a write is several posts and several workflows, so a fault partway through leaves some of them done, and a fresh attempt would publish those a second time. Read `GET /posts/{id}` to see what exists, then continue with a new key.
          */
         'Idempotency-Key'?: string;
       };
@@ -5984,7 +6018,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description The endpoint with its new secret. 201 rather than 200 — the framework default for POST; nothing new was created. */
+      /** @description The endpoint with its new secret. 201 rather than 200 (the framework default for POST); nothing new was created. */
       201: {
         headers: {
           [name: string]: unknown;
@@ -6029,7 +6063,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -6057,7 +6091,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;
@@ -6116,7 +6150,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description Too fast. RETRYABLE — `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
+      /** @description Too fast. RETRYABLE: `Retry-After` says when, and `X-RateLimit-*` say what the ceiling was. Distinct from 402: no upgrade is needed to make this exact call succeed. */
       429: {
         headers: {
           /** @description Seconds to wait before retrying. */
@@ -6144,7 +6178,7 @@ export interface operations {
           'application/json': components['schemas']['Error'];
         };
       };
-      /** @description `service_unavailable` — a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
+      /** @description `service_unavailable`: a dependency we need was unreachable and the request was not attempted, or not completed. Retryable, unlike a 500, and safe to retry with the same `Idempotency-Key`. */
       503: {
         headers: {
           [name: string]: unknown;

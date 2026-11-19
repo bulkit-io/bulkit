@@ -52,6 +52,7 @@ export type CommentReplyParams = Schemas['ReplyToCommentRequest'];
 
 // Media
 export type MediaItem = Schemas['MediaItem'];
+export type MediaListParams = WithStrings<QueryOf<'PublicMediaController_list'>, 'cursor'>;
 export type MediaUpload = Schemas['MediaUpload'];
 export type MediaUploadPart = Schemas['MediaUploadPart'];
 export type MediaUploadStartParams = Schemas['StartMediaUploadRequest'];
