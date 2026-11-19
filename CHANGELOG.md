@@ -1,20 +1,5 @@
 # bulkit
 
-## 0.2.0
-
-### Minor Changes
-
-- **Breaking:** `media.list()` now returns a page instead of an array, because `GET /media` is paged. It takes `{ cursor?, limit? }` (new `MediaListParams` type) and works like `posts.list()`: await it for one page (`page.data`, `page.nextCursor`), or use `for await` to walk the whole library, newest first.
-  
-  ```ts
-  // before
-  const items = await bulkit.media.list();
-  // after
-  for await (const item of bulkit.media.list()) { ... }
-  ```
-  
-  Updated the API types from the latest spec (new `MediaPage` schema).
-
 ## 0.1.1
 
 ### Patch Changes
