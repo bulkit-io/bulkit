@@ -129,6 +129,15 @@ const video = await bulkit.media.uploadMultipart(await openAsBlob('launch.mp4'),
   fileName: 'launch.mp4',
   mimeType: 'video/mp4',
 });
+
+// The media library is paged like every other list, newest first.
+for await (const item of bulkit.media.list()) {
+  console.log(item.id);
+}
+
+// Or take a single page:
+const page = await bulkit.media.list({ limit: 20 });
+console.log(page.data.length, page.nextCursor);
 ```
 
 ## Webhooks

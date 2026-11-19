@@ -1,4 +1,5 @@
 import { APIPromise, type APIResponse } from './api-promise';
+import { BulkitError } from './errors';
 
 interface CursorPageBody<T> {
   data: T[];
@@ -21,8 +22,17 @@ export class CursorPage<T> implements AsyncIterable<T> {
   readonly #fetchPage: FetchPage<T>;
 
   constructor(body: CursorPageBody<T>, response: Response, fetchPage: FetchPage<T>) {
+    // A server that predates paging for this endpoint answers with a bare array (or some other
+    // shape). Fail loudly here rather than read a missing `nextCursor` as "there's another page"
+    // and re-request page one forever.
+    if (!Array.isArray(body?.data)) {
+      throw new BulkitError(
+        `Expected a paged response ({ data, nextCursor }) from ${response.url || 'the API'}, ` +
+          'but got something else. The server may be running an older API version.',
+      );
+    }
     this.data = body.data;
-    this.nextCursor = body.nextCursor;
+    this.nextCursor = body.nextCursor ?? null;
     this.response = response;
     this.#fetchPage = fetchPage;
   }
